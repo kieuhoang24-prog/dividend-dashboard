@@ -1,0 +1,33 @@
+{
+  "name": "dividend-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pixel-art dividend farm dashboard fed by self-hosted Ghostfolio. Grows crops per holding, levels up with annual dividend income, and embeds nicely in Home Assistant.",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "tsx watch server/index.ts",
+    "dev:client": "vite",
+    "build": "tsc --noEmit && vite build && esbuild server/index.ts --bundle --platform=node --format=esm --external:hono --external:@hono/node-server --external:@hono/node-server/serve-static --outfile=dist-server/index.js",
+    "start": "NODE_ENV=production node dist-server/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fontsource/press-start-2p": "^5.1.0",
+    "@hono/node-server": "^1.13.7",
+    "hono": "^4.6.16",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "esbuild": "^0.24.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11"
+  }
+}

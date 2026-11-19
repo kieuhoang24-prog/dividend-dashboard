@@ -1,0 +1,101 @@
+name: dividend-dashboard
+
+services:
+  dashboard:
+    build: .
+    image: dividend-dashboard:local
+    container_name: dividend-dashboard
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8090}:8080"
+    environment:
+      GHOSTFOLIO_URL: ${GHOSTFOLIO_URL:-http://ghostfolio:3333}
+      GHOSTFOLIO_TOKEN: ${GHOSTFOLIO_TOKEN:-}
+      BASE_CURRENCY: ${BASE_CURRENCY:-GBP}
+      REFRESH_SECONDS: ${REFRESH_SECONDS:-300}
+      PORT: "8080"
+    depends_on:
+      - ghostfolio
+    networks:
+      - farm
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  ghostfolio:
+    image: docker.io/ghostfolio/ghostfolio:latest
+    container_name: ghostfolio
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 1m
+    ports:
+      - "3333:3333"
+    environment:
+      ACCESS_TOKEN_SALT: ${ACCESS_TOKEN_SALT:-please-change-this-random-salt}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-please-change-this-too-with-a-long-random-string}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://gf:change-me-pg-password@postgres:5432/ghostfolio?schema=public}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-change-me-redis}
+      REDIS_DB: "0"
+      HOST: 0.0.0.0
+      PORT: "3333"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - farm
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3333/api/v1/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+
+  postgres:
+    image: docker.io/library/postgres:15-alpine
+    container_name: gf-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-gf}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-pg-password}
+      POSTGRES_DB: ${POSTGRES_DB:-ghostfolio}
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    networks:
+      - farm
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d $$POSTGRES_DB -U $$POSTGRES_USER"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: docker.io/library/redis:8-alpine
+    container_name: gf-redis
+    restart: unless-stopped
+    user: "999:1000"
+    command: /bin/sh -c 'redis-server --requirepass "$${REDIS_PASSWORD:?REDIS_PASSWORD variable is not set}"'
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-change-me-redis}
+    volumes:
+      - redis:/data
+    networks:
+      - farm
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --pass \"$${REDIS_PASSWORD}\" ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  farm:
+    name: dividend-dashboard
+
+volumes:
+  postgres:
+  redis:

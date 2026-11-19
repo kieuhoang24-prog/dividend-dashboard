@@ -1,0 +1,399 @@
+:root {
+  --bg: #10151c;
+  --panel: #171e27;
+  --panel-2: #1d2632;
+  --border: #2a3441;
+  --text: #dfe6ee;
+  --muted: #8a97a6;
+  --accent: #7bb661;
+  --gold: #e8c547;
+  --red: #d9483b;
+  --pix: "Press Start 2P", ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.pix {
+  font-family: var(--pix);
+}
+
+.app {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 16px 14px 80px;
+}
+
+/* ── header ─────────────────────────────────────────────── */
+.income-head {
+  text-align: center;
+  padding: 10px 0 4px;
+}
+.income-head .label {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 1px;
+}
+.income-head .big {
+  font-family: var(--pix);
+  font-size: clamp(20px, 6vw, 34px);
+  color: var(--gold);
+  margin: 8px 0 4px;
+  text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.6);
+}
+.income-head .sub {
+  color: var(--muted);
+  font-size: 13px;
+}
+.income-head .sub b {
+  color: var(--accent);
+}
+
+.banner {
+  border: 2px solid var(--border);
+  background: var(--panel-2);
+  color: var(--muted);
+  padding: 8px 12px;
+  margin: 10px 0;
+  font-size: 12px;
+}
+.banner.warn {
+  border-color: var(--red);
+  color: #f3b5ae;
+}
+
+/* ── tab bar ────────────────────────────────────────────── */
+.tabs {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  gap: 4px;
+  margin: 12px 0 16px;
+  padding: 6px 0;
+  background: linear-gradient(var(--bg) 78%, transparent);
+}
+.tabs button {
+  flex: 1;
+  font-family: var(--pix);
+  font-size: 9px;
+  padding: 10px 4px;
+  color: var(--muted);
+  background: var(--panel);
+  border: 2px solid var(--border);
+  cursor: pointer;
+}
+.tabs button.active {
+  color: #0d0f12;
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.5);
+}
+
+/* ── cards & generic ────────────────────────────────────── */
+.card {
+  border: 2px solid var(--border);
+  background: var(--panel);
+  padding: 14px;
+  margin-bottom: 14px;
+}
+.card h3 {
+  margin: 0 0 10px;
+  font-family: var(--pix);
+  font-size: 10px;
+  color: var(--accent);
+  letter-spacing: 1px;
+}
+.hint {
+  color: var(--muted);
+  font-size: 12px;
+}
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+button.btn {
+  font-family: var(--pix);
+  font-size: 9px;
+  padding: 9px 14px;
+  color: #0d0f12;
+  background: var(--accent);
+  border: 2px solid var(--accent);
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+}
+button.btn:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+/* ── farm canvas ────────────────────────────────────────── */
+.farm-wrap {
+  position: relative;
+  border: 2px solid var(--border);
+  background: #0b0f14;
+  overflow: auto;
+  max-height: 74vh;
+}
+.farm-wrap canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+}
+.plot-label {
+  position: absolute;
+  transform: translate(-50%, 0);
+  font-family: var(--pix);
+  font-size: 8px;
+  color: #fff;
+  background: rgba(13, 15, 18, 0.82);
+  border: 1px solid #000;
+  padding: 3px 5px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.plot-label .amt {
+  color: var(--gold);
+}
+
+.farm-stats {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.farm-stats .stat {
+  flex: 1;
+  min-width: 130px;
+  border: 2px solid var(--border);
+  background: var(--panel);
+  padding: 10px;
+  text-align: center;
+}
+.farm-stats .stat .v {
+  font-family: var(--pix);
+  font-size: 12px;
+  color: var(--gold);
+}
+.farm-stats .stat .k {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+/* ── tables ─────────────────────────────────────────────── */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+th,
+td {
+  text-align: right;
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--border);
+}
+th:first-child,
+td:first-child {
+  text-align: left;
+}
+th {
+  font-family: var(--pix);
+  font-size: 8px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+td.sym {
+  font-weight: bold;
+  color: var(--accent);
+  white-space: nowrap;
+}
+td.nm {
+  text-align: left;
+  color: var(--muted);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+td.gold {
+  color: var(--gold);
+}
+.crop-chip {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  vertical-align: middle;
+  image-rendering: pixelated;
+}
+
+/* ── harvest calendar ───────────────────────────────────── */
+.months {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+}
+.month {
+  border: 2px solid var(--border);
+  background: var(--panel);
+  padding: 10px;
+}
+.month.now {
+  border-color: var(--accent);
+}
+.month .m-label {
+  font-family: var(--pix);
+  font-size: 8px;
+  color: var(--muted);
+}
+.month.now .m-label {
+  color: var(--accent);
+}
+.month .m-total {
+  font-family: var(--pix);
+  font-size: 11px;
+  color: var(--gold);
+  margin: 6px 0;
+}
+.month .m-total.zero {
+  color: var(--muted);
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.chip {
+  font-size: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  padding: 2px 5px;
+  color: var(--text);
+}
+
+/* ── stages ─────────────────────────────────────────────── */
+.stage {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  border: 2px solid var(--border);
+  background: var(--panel);
+  padding: 12px;
+  margin-bottom: 10px;
+}
+.stage.done {
+  border-color: #3f5c34;
+}
+.stage.current {
+  border-color: var(--gold);
+}
+.stage .badge {
+  font-family: var(--pix);
+  font-size: 12px;
+  color: var(--muted);
+  padding: 4px 6px;
+  border: 2px solid var(--border);
+}
+.stage.done .badge {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.stage.current .badge {
+  color: var(--gold);
+  border-color: var(--gold);
+}
+.stage .s-name {
+  font-family: var(--pix);
+  font-size: 10px;
+}
+.stage .s-perk {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 4px;
+}
+.progress {
+  border: 2px solid var(--border);
+  background: var(--panel-2);
+  height: 18px;
+  position: relative;
+  margin: 10px 0 4px;
+}
+.progress > div {
+  background: var(--accent);
+  height: 100%;
+}
+.progress .p-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--pix);
+  font-size: 8px;
+  color: #fff;
+  text-shadow: 1px 1px 0 #000;
+}
+
+/* ── settings ───────────────────────────────────────────── */
+.kv {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 12px;
+  font-size: 13px;
+}
+.kv .k {
+  color: var(--muted);
+}
+.kv .v {
+  text-align: right;
+  word-break: break-all;
+}
+code.snip {
+  display: block;
+  background: #0b0f14;
+  border: 2px solid var(--border);
+  padding: 10px;
+  font-size: 12px;
+  white-space: pre;
+  overflow: auto;
+  color: #9fd3a8;
+}
+.ok {
+  color: var(--accent);
+}
+.bad {
+  color: var(--red);
+}
+
+/* ── kiosk (Home Assistant embed) ───────────────────────── */
+.kiosk .tabs,
+.kiosk .app-footer {
+  display: none;
+}
+.kiosk .app {
+  padding-bottom: 10px;
+}
+
+.app-footer {
+  margin-top: 18px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 11px;
+}
