@@ -1,25 +1,19 @@
-// Scene composer for the 32px world: painted grass, dirt path, house zone
-// with yard, field plots with hanging signs, pond, props, chickens, scatter.
+// Scene composer: painted grass/soil/path/pond (procedural) + generated
+// Stardew-style sprites (house tiers, oak tree, crop sheets, props).
 
 import {
   C,
   TILE,
-  drawBush,
-  drawChicken,
-  drawCrop,
-  drawFenceRun,
-  drawFlowerbed,
-  drawHaystack,
-  drawHouse,
-  drawLogPile,
-  drawRock,
-  drawScarecrow,
-  drawSign,
-  drawSmoke,
-  drawTree,
-  drawTrough,
   CROP_NAMES,
+  drawSign,
 } from "./art.js";
+import {
+  drawAsset,
+  assetAspect,
+  drawCropSprite,
+  drawPropSprite,
+  type PropName,
+} from "./assets.js";
 import type { HoldingRow } from "../../shared/types";
 
 export const SCENE_W = 720;
@@ -27,6 +21,8 @@ const FIELD_TOP = 152;
 const PLOT_W = 3 * TILE; // 96
 const ROW_PITCH = PLOT_W + 44;
 const COL_X = [26, 26 + PLOT_W + 76];
+const HOUSE_KEYS = ["house-cabin", "house-barn", "house-manor"] as const;
+const HOUSE_W = [150, 175, 205];
 
 function rng(seed: number): () => number {
   let s = seed >>> 0;
@@ -50,7 +46,21 @@ function near(r: Rect, x: number, y: number, pad = 4): boolean {
   return x >= r.x - pad && x <= r.x + r.w + pad && y >= r.y - pad && y <= r.y + r.h + pad;
 }
 
-/* ── grass painting ───────────────────────────────────────── */
+function p(ctx: CanvasRenderingContext2D, color: string, x: number, y: number, w = 1, h = 1): void {
+  ctx.fillStyle = color;
+  ctx.fillRect(Math.round(x), Math.round(y), w, h);
+}
+
+function ellipseFill(ctx: CanvasRenderingContext2D, cx: number, cy: number, rx: number, ry: number): void {
+  for (let dy = -ry; dy <= ry; dy++) {
+    const t = 1 - (dy / (ry + 0.5)) ** 2;
+    if (t <= 0) continue;
+    const w = Math.max(1, Math.round(rx * Math.sqrt(t)));
+    p(ctx, ctx.fillStyle as string, cx - w, cy + dy, w * 2 + 1, 1);
+  }
+}
+
+/* ── grass ────────────────────────────────────────────────── */
 function paintGrass(ctx: CanvasRenderingContext2D, w: number, h: number): void {
   ctx.fillStyle = C.gBase;
   ctx.fillRect(0, 0, w, h);
@@ -62,7 +72,6 @@ function paintGrass(ctx: CanvasRenderingContext2D, w: number, h: number): void {
     ellipseFill(ctx, Math.floor(r() * w), Math.floor(r() * h), 16 + r() * 30, 9 + r() * 15);
   }
   ctx.restore();
-  // tufts
   for (let i = 0; i < 120; i++) {
     const x = Math.floor(r() * w);
     const y = Math.floor(r() * h);
@@ -72,15 +81,6 @@ function paintGrass(ctx: CanvasRenderingContext2D, w: number, h: number): void {
       ctx.fillStyle = C.gHi;
       ctx.fillRect(x + 1, y - 2, 1, 2);
     }
-  }
-}
-
-function ellipseFill(ctx: CanvasRenderingContext2D, cx: number, cy: number, rx: number, ry: number): void {
-  for (let dy = -ry; dy <= ry; dy++) {
-    const t = 1 - (dy / (ry + 0.5)) ** 2;
-    if (t <= 0) continue;
-    const w = Math.max(1, Math.round(rx * Math.sqrt(t)));
-    ctx.fillRect(cx - w, cy + dy, w * 2 + 1, 1);
   }
 }
 
@@ -107,7 +107,7 @@ function pathSeg(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: numb
   }
 }
 
-/* ── field plot ───────────────────────────────────────────── */
+/* ── soil plot ────────────────────────────────────────────── */
 function soilPlot(ctx: CanvasRenderingContext2D, x: number, y: number, r: () => number): void {
   ctx.fillStyle = C.soil;
   ctx.fillRect(x, y, PLOT_W, PLOT_W);
@@ -122,7 +122,6 @@ function soilPlot(ctx: CanvasRenderingContext2D, x: number, y: number, r: () => 
   ctx.fillRect(x, y + PLOT_W - 1, PLOT_W, 1);
   ctx.fillRect(x, y, 1, PLOT_W);
   ctx.fillRect(x + PLOT_W - 1, y, 1, PLOT_W);
-  // corner posts
   for (const [cxp, cyp] of [[x - 1, y - 1], [x + PLOT_W - 3, y - 1], [x - 1, y + PLOT_W - 3], [x + PLOT_W - 3, y + PLOT_W - 3]]) {
     ctx.fillStyle = C.wood;
     ctx.fillRect(cxp, cyp, 4, 4);
@@ -130,6 +129,18 @@ function soilPlot(ctx: CanvasRenderingContext2D, x: number, y: number, r: () => 
     ctx.fillRect(cxp, cyp, 2, 4);
     ctx.fillStyle = C.outline;
     ctx.fillRect(cxp + 3, cyp, 1, 4);
+  }
+}
+
+/* ── yard fence (procedural, simple rails) ────────────────── */
+function fenceRun(ctx: CanvasRenderingContext2D, x: number, y: number, w: number): void {
+  if (w < 12) return;
+  p(ctx, C.woodDark, x, y + 3, w, 3);
+  p(ctx, C.woodTan, x, y + 3, w, 1);
+  for (let px2 = x; px2 < x + w - 4; px2 += 22) {
+    p(ctx, C.outline, px2, y, 6, 14);
+    p(ctx, C.woodMid, px2, y + 1, 5, 12);
+    p(ctx, C.woodLight, px2, y + 1, 2, 12);
   }
 }
 
@@ -143,40 +154,33 @@ function drawPond(ctx: CanvasRenderingContext2D, height: number, frame: number):
   const cy = height - 100;
   ctx.save();
   ctx.globalAlpha = 0.9;
-  ellipseFillC(ctx, C.sand, cx, cy + 2, 82, 38);
+  ctx.fillStyle = C.sand;
+  ellipseFill(ctx, cx, cy + 2, 82, 38);
   ctx.restore();
-  ellipseFillC(ctx, C.outline, cx, cy, 76, 34);
-  ellipseFillC(ctx, C.water, cx, cy, 73, 32);
-  ellipseFillC(ctx, C.waterLight, cx - 18, cy - 12, 34, 12);
+  ctx.fillStyle = C.outline;
+  ellipseFill(ctx, cx, cy, 76, 34);
+  ctx.fillStyle = C.water;
+  ellipseFill(ctx, cx, cy, 73, 32);
+  ctx.fillStyle = "#7fc9e0";
+  ellipseFill(ctx, cx - 18, cy - 12, 34, 12);
   ctx.fillStyle = C.waterHi;
   const off = frame * 3;
   ctx.fillRect(cx - 40 + off, cy - 8, 14, 1);
   ctx.fillRect(cx + 8 - off, cy + 4, 18, 1);
   ctx.fillRect(cx + 30, cy + 16 - (frame % 2), 10, 1);
-  // reeds
   for (const [dx, dy] of [[-84, -8], [-78, 2], [74, 6], [80, -2]] as const) {
-    ctx.fillStyle = C.leaf;
-    ctx.fillRect(cx + dx, cy + dy, 2, 12);
-    ctx.fillStyle = C.leafDark;
-    ctx.fillRect(cx + dx, cy + dy, 1, 6);
+    p(ctx, C.leaf, cx + dx, cy + dy, 2, 12);
+    p(ctx, C.leafDark, cx + dx, cy + dy, 1, 6);
   }
-}
-
-function ellipseFillC(ctx: CanvasRenderingContext2D, color: string, cx: number, cy: number, rx: number, ry: number): void {
-  ctx.fillStyle = color;
-  ellipseFill(ctx, cx, cy, rx, ry);
 }
 
 /* ── scatter flowers ──────────────────────────────────────── */
 function flowerDot(ctx: CanvasRenderingContext2D, x: number, y: number, col: string): void {
-  ctx.fillStyle = C.leaf;
-  ctx.fillRect(x + 1, y + 2, 1, 2);
-  ctx.fillStyle = col;
-  ctx.fillRect(x, y + 1, 3, 2);
-  ctx.fillRect(x + 1, y, 1, 1);
-  ctx.fillRect(x + 1, y + 3, 1, 1);
-  ctx.fillStyle = C.wheat;
-  ctx.fillRect(x + 1, y + 1, 1, 1);
+  p(ctx, C.leaf, x + 1, y + 2, 1, 2);
+  p(ctx, col, x, y + 1, 3, 2);
+  p(ctx, col, x + 1, y, 1, 1);
+  p(ctx, col, x + 1, y + 3, 1, 1);
+  p(ctx, C.wheat, x + 1, y + 1, 1, 1);
 }
 
 export interface ScenePayload { holdings: HoldingRow[]; level: number }
@@ -192,53 +196,54 @@ export function drawScene(
   ctx.canvas.height = height * scale;
   ctx.setTransform(scale, 0, 0, scale, 0, 0);
   ctx.imageSmoothingEnabled = false;
-  const sway = frame % 2 === 0 ? 0 : 1;
   const r = rng(2024);
 
   paintGrass(ctx, width, height);
 
-  // ── house zone ──
+  // ── house zone (generated sprite) ──
   const tier = (level >= 4 ? 2 : level >= 2 ? 1 : 0) as 0 | 1 | 2;
-  const hw = [60, 84, 104][tier];
-  const hx = width - hw - 30;
-  const hy = 16;
-  const house = drawHouse(ctx, hx, hy, { tier, gold: level >= 5 });
-  const gateX = house.doorX;
+  const hw = HOUSE_W[tier];
+  const aspect = assetAspect(HOUSE_KEYS[tier]);
+  const hh = Math.round(hw * aspect);
+  const hx = width - hw - 24;
+  const hy = 6;
+  const house = drawAsset(ctx, HOUSE_KEYS[tier], hx, hy, hw);
+  const gateX = hx + Math.round(hw / 2);
+  const doorY = hy + hh;
+  const fy = doorY + 6;
 
-  // yard fence either side of the gate
-  const fy = house.doorY + 2;
-  drawFenceRun(ctx, hx - 26, fy - 4, gateX - hx + 8);
-  drawFenceRun(ctx, gateX + 14, fy - 4, hx + hw + 26 - gateX - 14);
+  fenceRun(ctx, hx - 26, fy, Math.max(12, gateX - hx - 10));
+  fenceRun(ctx, gateX + 14, fy, Math.max(12, hx + hw + 26 - gateX - 14));
 
-  // water trough in the yard + flowering bush
-  drawTrough(ctx, hx + 16, fy + 8);
-  drawBush(ctx, hx + hw + 14, fy + 10, true, sway);
+  drawPropSprite(ctx, "trough", hx - 44, fy + 12, 20);
+  drawPropSprite(ctx, "bush", hx + hw + 14, fy + 14, 30);
 
-  // ── path: gate → down → left to the field ──
-  pathSeg(ctx, gateX, house.doorY, gateX, FIELD_TOP - 26, r);
-  pathSeg(ctx, COL_X[1] + PLOT_W + 18, FIELD_TOP - 26, gateX, FIELD_TOP - 26, r);
-  pathSeg(ctx, COL_X[1] + PLOT_W + 18, FIELD_TOP - 26, COL_X[1] + PLOT_W + 18, FIELD_TOP + 44, r);
+  // ── path: gate → down → left to the field (routed below the yard fence) ──
+  const PATH_Y = fy + 18;
+  pathSeg(ctx, gateX, doorY, gateX, PATH_Y, r);
+  pathSeg(ctx, COL_X[1] + PLOT_W + 18, PATH_Y, gateX, PATH_Y, r);
+  pathSeg(ctx, COL_X[1] + PLOT_W + 18, PATH_Y, COL_X[1] + PLOT_W + 18, FIELD_TOP + 44, r);
 
-  // ── tree cluster top-left ──
+  // ── tree cluster (generated sprite) ──
   if (level >= 2) {
-    drawTree(ctx, 96, 118, sway);
-    drawTree(ctx, 178, 92, sway);
-    drawBush(ctx, 46, 128, level >= 3, sway);
+    drawAsset(ctx, "tree-oak", 40, 14, 124);
+    drawAsset(ctx, "tree-oak", 158, 46, 104);
+    drawPropSprite(ctx, "bush", 30, 132, 26);
   } else {
-    drawBush(ctx, 90, 120, false, sway);
-    drawRock(ctx, 150, 118);
+    drawAsset(ctx, "tree-oak", 80, 44, 96);
+    drawPropSprite(ctx, "rock", 158, 122, 18);
   }
   if (level >= 3) {
-    drawTree(ctx, 30, 96, sway);
-    drawRock(ctx, 230, 106, true);
+    drawAsset(ctx, "tree-oak", 6, 60, 96);
+    drawPropSprite(ctx, "rock", 236, 116, 24);
   }
 
   // ── pond or lower-right props ──
   if (level >= 4) {
     drawPond(ctx, height, frame);
   } else {
-    drawHaystack(ctx, 590, height - 110);
-    drawLogPile(ctx, 500, height - 90);
+    drawPropSprite(ctx, "haystack", 596, height - 112, 40);
+    drawPropSprite(ctx, "logs", 502, height - 92, 26);
   }
 
   // ── field ──
@@ -252,35 +257,34 @@ export function drawScene(
     const name = cropName(h.cropIndex);
     for (let ty = 0; ty < 3; ty++) {
       for (let tx = 0; tx < 3; tx++) {
-        const s = frame % 2 === 1 && (tx + ty + i) % 2 === 0 ? 1 : 0;
-        drawCrop(ctx, name, stage, px + tx * TILE, py + ty * TILE, s);
+        drawCropSprite(ctx, name, stage, px + tx * TILE + 2, py + ty * TILE + 30, 36);
+        if (stage === 3 && frame % 4 === 2) {
+          // harvest-ready sparkle pulse
+          p(ctx, C.white, px + tx * TILE + 14, py + ty * TILE - 2, 2, 2);
+          p(ctx, C.wheat, px + tx * TILE + 22, py + ty * TILE + 6, 1, 1);
+        }
       }
     }
     drawSign(ctx, h.symbol, `£${Math.round(h.t12mDividend)}/yr`, px + PLOT_W / 2, py + PLOT_W + 8);
   });
 
-  // scarecrow beside the field, beside the path stub
-  drawScarecrow(ctx, COL_X[1] + PLOT_W + 42, FIELD_TOP + 42, sway);
-
-  // chickens: two spots, wandering with the frame
-  for (const [bx, by] of [[150, FIELD_TOP - 40], [330, FIELD_TOP + 130]] as const) {
-    drawChicken(ctx, bx + (frame >= 2 ? 6 : 0), by, frame);
+  drawPropSprite(ctx, "scarecrow", COL_X[1] + PLOT_W + 44, FIELD_TOP + 54, 50);
+  for (const [bx, by] of [[150, FIELD_TOP - 42], [330, FIELD_TOP + 134]] as const) {
+    drawPropSprite(ctx, frame === 1 ? "chicken-peck" : "chicken", bx + (frame >= 2 ? 6 : 0), by, 18);
   }
-
-  drawFlowerbed(ctx, hx + hw + 10, height - 120);
 
   // ── scatter: flowers + pebbles avoiding everything built ──
   const fieldBottom = FIELD_TOP + Math.ceil(holdings.length / 2) * ROW_PITCH;
   const blocked: Rect[] = [
-    { x: hx - 34, y: hy - 14, w: hw + 68, h: house.h + 34 },
-    { x: 12, y: 70, w: 300, h: 70 }, // tree/prop band top-left
+    { x: hx - 34, y: hy - 14, w: hw + 68, h: hh + 34 },
+    { x: 12, y: 60, w: 300, h: 84 },
     ...holdings.map((_, i) => ({
       x: COL_X[i % 2] - 8,
       y: FIELD_TOP + Math.floor(i / 2) * ROW_PITCH - 6,
       w: PLOT_W + 16,
       h: PLOT_W + 46,
     })),
-    { x: gateX - 12, y: house.doorY - 8, w: 26, h: fieldBottom - house.doorY },
+    { x: gateX - 12, y: hy + hh - 8, w: 26, h: fieldBottom - hy - hh },
     { x: COL_X[1] + PLOT_W + 4, y: FIELD_TOP - 40, w: 34, h: 110 },
     ...(level >= 4 ? [pondRect(height)] : [{ x: 440, y: height - 220, w: 220, h: 120 }]),
   ];
@@ -298,16 +302,25 @@ export function drawScene(
     if (r() > 0.5) flowerDot(ctx, x + 7, y + 3, petals[(x + y * 3) % petals.length]);
     if (r() > 0.8) flowerDot(ctx, x - 5, y + 5, petals[(x * 3 + y * 5) % petals.length]);
     if (r() > 0.72) {
-      // pebble cluster
-      ctx.fillStyle = C.stone;
-      ctx.fillRect(x + 12, y + 4, 2, 2);
-      ctx.fillRect(x + 15, y + 6, 2, 2);
-      ctx.fillStyle = C.stoneLight;
-      ctx.fillRect(x + 12, y + 4, 1, 1);
+      p(ctx, C.stone, x + 12, y + 4, 2, 2);
+      p(ctx, C.stone, x + 15, y + 6, 2, 2);
+      p(ctx, C.stoneLight, x + 12, y + 4, 1, 1);
     }
-    if (r() > 0.93) drawRock(ctx, x + 20, y + 8);
   }
 
-  // chimney smoke last so it floats over the roof
-  if (house.chimney) drawSmoke(ctx, house.chimney.x, house.chimney.y + 4, frame);
+  // ── chimney smoke ──
+  if (tier >= 1) {
+    const chimX = hx + Math.round(hw * 0.74);
+    const chimY = hy + Math.round(hh * 0.06);
+    ctx.save();
+    ctx.globalAlpha = 0.75;
+    const wrap = (v: number, m: number) => ((v % m) + m) % m;
+    const rise = frame * 3;
+    p(ctx, C.smokeDark, chimX - 2 + Math.round(Math.sin(rise)), chimY - 4 - wrap(rise, 18), 3, 3);
+    p(ctx, C.smoke, chimX + 2, chimY - 4 - wrap(rise + 9, 18), 2, 2);
+    ctx.restore();
+  }
 }
+
+// re-exported for App-level callers
+export { drawPropSprite as drawProp, type PropName };

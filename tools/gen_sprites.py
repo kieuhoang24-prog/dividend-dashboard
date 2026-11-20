@@ -1,0 +1,138 @@
+#!/usr/bin/env python3
+"""Generate Dividend Dashboard sprite assets on Evans ComfyUI (Z-Image Turbo).
+
+Co-tenancy: runs the papercraft GPU guard before every submit; aborts on guard
+failure. One 8-step 1024x1024 gen per asset, outputs copied into public/sprites.
+"""
+import json
+import pathlib
+import random
+import shutil
+import subprocess
+import sys
+import urllib.request
+
+REPO = pathlib.Path(__file__).resolve().parent.parent
+SPRITES = REPO / "public" / "sprites"
+WORKFLOW = pathlib.Path.home() / ".agents/skills/comfyui/workflows/z_image_turbo.json"
+COMFY = str(pathlib.Path.home() / ".venvs/comfy-mcp/bin/comfy")
+HOST, PORT = "192.168.5.168", 8188
+GUARD = str(pathlib.Path.home() / ".agents/skills/comfyui/scripts/evans_gpu_guard.sh")
+
+STYLE = (
+    "Stardew Valley style pixel art sprite, 3/4 top-down RPG game view, crisp pixel edges, "
+    "warm saturated palette, soft dark outlines, lighting from top-left, centered subject, "
+    "flat solid magenta background, no text, no watermark, no drop shadow"
+)
+
+CROP_STAGE_TMPL = (
+    "pixel art sprite sheet: four growth stages of a {crop} in one horizontal row, evenly "
+    "spaced with equal cell sizes: 1 tiny seedling, 2 young sprout, 3 leafy plant, "
+    "4 mature harvest-ready {mature}. "
+)
+
+ASSETS = [
+    ("house-cabin", "a small wooden starter farmhouse cottage: brown plank walls, steep thatched roof, stone chimney, two small windows with red flower boxes, wooden door with stone step. " + STYLE),
+    ("house-barn", "a medium red barn farmhouse: dark shingled roof, hayloft door above double doors, white-trimmed windows with red flower boxes, stone chimney. " + STYLE),
+    ("house-manor", "a large two-story manor farmhouse: cream plaster walls with timber frame, steep red tile roof, dormer windows, stone chimney. " + STYLE),
+    ("tree-oak", "one tall oak tree: wide lobed leafy canopy in three tones of green with dappled highlights, thick brown trunk with root flare. " + STYLE),
+    ("crop-wheat", CROP_STAGE_TMPL.format(crop="wheat crop", mature="golden drooping wheat heads") + STYLE),
+    ("crop-carrot", CROP_STAGE_TMPL.format(crop="carrot crop", mature="feathery green carrot tops with orange root visible at the soil line") + STYLE),
+    ("crop-pumpkin", CROP_STAGE_TMPL.format(crop="pumpkin crop", mature="leafy vine with one large ridged orange pumpkin and curly tendril") + STYLE),
+    ("crop-tomato", CROP_STAGE_TMPL.format(crop="tomato plant", mature="leafy stems with clusters of red tomatoes") + STYLE),
+    ("crop-corn", CROP_STAGE_TMPL.format(crop="corn crop", mature="tall corn stalks with yellow cobs and green husks") + STYLE),
+    ("crop-potato", CROP_STAGE_TMPL.format(crop="potato plant", mature="leafy green mound with small purple flowers") + STYLE),
+    ("crop-berry", CROP_STAGE_TMPL.format(crop="berry bush", mature="canes with clusters of purple berries") + STYLE),
+    ("crop-tulip", CROP_STAGE_TMPL.format(crop="tulip", mature="pink tulip blooms with long green leaves") + STYLE),
+    ("props-sheet", "pixel art sprite sheet, exactly 4 columns by 2 rows on flat magenta background: row 1: a scarecrow on a wooden post, a round golden haystack, a pile of cut logs, a wooden water trough; row 2: a white chicken standing, a white chicken pecking at the ground, a small flowering green bush, a grey boulder. " + STYLE),
+]
+
+
+def guard() -> bool:
+    r = subprocess.run(["bash", GUARD, "--warn"], capture_output=True, text=True)
+    ok = r.returncode == 0
+    if not ok:
+        print(f"[guard] exit {r.returncode}: {r.stdout.strip()} {r.stderr.strip()}", flush=True)
+    return ok
+
+
+def comfy_history(prompt_id: str) -> dict:
+    with urllib.request.urlopen(f"http://{HOST}:{PORT}/history/{prompt_id}", timeout=30) as res:
+        return json.load(res)
+
+
+def outputs_for(prompt_id: str) -> list[str]:
+    hist = comfy_history(prompt_id).get(prompt_id, {})
+    names = []
+    for item in hist.get("outputs", {}).values():
+        for img in item.get("images", []):
+            names.append(img.get("filename", ""))
+    return [n for n in names if n]
+
+
+def main() -> None:
+    SPRITES.mkdir(parents=True, exist_ok=True)
+    only = sys.argv[1:] or None
+    tmpl = json.loads(WORKFLOW.read_text())
+    results = {}
+    for name, prompt in ASSETS:
+        if only and name not in only:
+            continue
+        if not guard():
+            sys.exit(1)
+        wf = json.loads(json.dumps(tmpl))
+        wf["4"]["inputs"]["text"] = prompt
+        wf["8"]["inputs"]["seed"] = random.randint(1, 2**31 - 1)
+        wf["10"]["inputs"]["filename_prefix"] = f"dd_{name}"
+        tmp = SPRITES / f".wf_{name}.json"
+        tmp.write_text(json.dumps(wf))
+        print(f"[gen] {name}: submitting", flush=True)
+        run = subprocess.run(
+            [COMFY, "--json", "run", "--workflow", str(tmp), "--host", HOST, "--port", str(PORT), "--wait"],
+            capture_output=True, text=True, timeout=900,
+        )
+        tmp.unlink(missing_ok=True)
+        if run.returncode != 0:
+            print(f"[gen] {name}: FAILED\n{run.stdout[-400:]}\n{run.stderr[-400:]}", flush=True)
+            results[name] = "failed"
+            continue
+        prompt_id = None
+        for line in run.stdout.splitlines():
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(obj, dict):
+                prompt_id = obj.get("prompt_id") or obj.get("promptId") or (obj.get("prompt") or [None, None, None])[1] if isinstance(obj.get("prompt"), list) else obj.get("prompt_id") or obj.get("promptId")
+                if isinstance(prompt_id, list):
+                    prompt_id = prompt_id[1]
+        if not prompt_id:
+            m = None
+            for line in run.stdout.splitlines():
+                if '"prompt_id"' in line or "prompt_id" in line:
+                    import re
+                    m = re.search(r'"prompt_id"\s*:\s*"([^"]+)"', line)
+                    if m:
+                        prompt_id = m.group(1)
+        if not prompt_id:
+            print(f"[gen] {name}: no prompt_id in output:\n{run.stdout[-600:]}", flush=True)
+            results[name] = "no-id"
+            continue
+        names = outputs_for(prompt_id)
+        if not names:
+            print(f"[gen] {name}: no outputs for {prompt_id}", flush=True)
+            results[name] = "no-output"
+            continue
+        url = f"http://{HOST}:{PORT}/view?filename={urllib.request.quote(names[0])}&type=output"
+        raw_dir = REPO / "tools" / "raw"
+        raw_dir.mkdir(parents=True, exist_ok=True)
+        dest = raw_dir / f"{name}.png"
+        with urllib.request.urlopen(url, timeout=60) as res, open(dest, "wb") as fh:
+            shutil.copyfileobj(res, fh)
+        print(f"[gen] {name}: OK -> {dest} ({dest.stat().st_size} bytes)", flush=True)
+        results[name] = "ok"
+    print("[gen] summary:", json.dumps(results), flush=True)
+
+
+if __name__ == "__main__":
+    main()

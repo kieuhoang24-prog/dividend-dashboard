@@ -1,11 +1,23 @@
 import { useEffect, useRef, useState } from "react";
 import type { PortfolioPayload } from "../../shared/types";
 import { drawScene } from "../lib/farm";
+import { loadAssets } from "../lib/assets";
 import { money } from "../lib/format";
 
 export function FarmView({ data }: { data: PortfolioPayload }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [frame, setFrame] = useState(0);
+  const [assetsReady, setAssetsReady] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    loadAssets().finally(() => {
+      if (alive) setAssetsReady(true);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     const id = setInterval(() => setFrame((f) => (document.hidden ? f : (f + 1) % 4)), 700);
@@ -13,10 +25,11 @@ export function FarmView({ data }: { data: PortfolioPayload }) {
   }, []);
 
   useEffect(() => {
+    if (!assetsReady) return;
     const ctx = canvasRef.current?.getContext("2d");
     if (!ctx) return;
     drawScene(ctx, { holdings: data.holdings, level: data.farm.level }, 1, frame);
-  }, [data, frame]);
+  }, [data, frame, assetsReady]);
 
   const nextPct = data.farm.next ? data.farm.progressPct : 100;
   const aria = data.holdings.map((h) => `${h.symbol} ${money(data, h.t12mDividend)} per year`).join(", ");

@@ -1,4 +1,5 @@
 import {
+  CROP_COUNT,
   cropIndexFor,
   farmStatusFor,
   type DividendRow,
@@ -66,9 +67,22 @@ export function buildPayload(opts: {
     }
   }
 
+  // Assign crops with max variety: greedy pick per holding, skipping crops
+  // already taken until the palette wraps (8 crops, so >8 holdings repeat).
+  const usedCrops = new Set<number>();
   const holdings: HoldingRow[] = positions
-    .map((p) => {
+    .map((p, idx) => {
       const t12 = t12BySymbol.get(p.symbol) ?? 0;
+      const base = cropIndexFor(p.symbol);
+      let crop = 0;
+      for (let attempt = 0; attempt < CROP_COUNT; attempt++) {
+        const candidate = (base + idx + attempt) % CROP_COUNT;
+        if (!usedCrops.has(candidate)) {
+          crop = candidate;
+          break;
+        }
+      }
+      usedCrops.add(crop);
       return {
         symbol: p.symbol,
         name: p.name,
@@ -76,7 +90,7 @@ export function buildPayload(opts: {
         value: p.value,
         t12mDividend: Math.round(t12 * 100) / 100,
         yieldPct: p.value > 0 ? Math.round((t12 / p.value) * 1000) / 10 : 0,
-        cropIndex: cropIndexFor(p.symbol),
+        cropIndex: crop,
       };
     })
     .sort((a, b) => b.t12mDividend - a.t12mDividend || b.value - a.value);
