@@ -27,6 +27,7 @@ export const ASSET_MANIFEST: Record<string, string> = {
   "ground-grass-v1": "/sprites/ground-grass-v1.png",
   "ground-grass-v2": "/sprites/ground-grass-v2.png",
   "ground-path": "/sprites/ground-path.png",
+  "sleep-sheet": "/sprites/sleep-sheet.png",
 };
 
 export type PropName =
@@ -46,6 +47,14 @@ export type PropName =
   | "farmer-walk1"
   | "farmer-walk2"
   | "farmer-hoe"
+  | "cow-lying"
+  | "chicken-sleep"
+  | "duck-sleep"
+  | "cat-sleep"
+  | "dog"
+  | "dog-walk"
+  | "lantern"
+  | "farmer-rain"
   | "farmer-water1"
   | "farmer-water2"
   | "farmer-harvest1"
@@ -95,7 +104,7 @@ const cache = new Map<string, Asset>();
 
 function gridFor(key: string): { cols: number; rows: number } | null {
   if (key.startsWith("crop-")) return { cols: 5, rows: 1 };
-  if (/^(props|animals|actions|props2|trees2|animals2)-sheet$/.test(key)) return { cols: 4, rows: 2 };
+  if (/^(props|animals|actions|props2|trees2|animals2|sleep)-sheet$/.test(key)) return { cols: 4, rows: 2 };
   return null;
 }
 
@@ -382,6 +391,14 @@ const PROP_CELLS: Record<string, [string, number, number]> = {
   "horse-graze": ["animals2-sheet", 1, 1],
   goat: ["animals2-sheet", 2, 1],
   rabbit: ["animals2-sheet", 3, 1],
+  "cow-lying": ["sleep-sheet", 0, 0],
+  "chicken-sleep": ["sleep-sheet", 1, 0],
+  "duck-sleep": ["sleep-sheet", 2, 0],
+  "cat-sleep": ["sleep-sheet", 3, 0],
+  dog: ["sleep-sheet", 0, 1],
+  "dog-walk": ["sleep-sheet", 1, 1],
+  lantern: ["sleep-sheet", 2, 1],
+  "farmer-rain": ["sleep-sheet", 3, 1],
 };
 
 /** Draw one cell of the props/animals sheets, bottom-center anchored,

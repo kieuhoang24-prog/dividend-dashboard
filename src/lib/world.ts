@@ -47,6 +47,8 @@ function hashDate(d: Date): number {
 }
 
 export interface World {
+  /** fractional local hour (URL ?hour= overrides for testing) */
+  hour: number;
   /** continuous daylight 0 (deep night) .. 1 (noon) */
   daylight: number;
   /** how deep into night phase (for fireflies/windows) */
@@ -79,7 +81,11 @@ export function worldState(prev: World | null, settings: Settings): World {
 
   // continuous day/night curve from the real clock (fractional hours).
   // sunrise 06:00, sunset 20:00 — light follows a half-sine between them.
-  const h = now.getHours() + now.getMinutes() / 60;
+  // ?hour=9 overrides the clock for testing / pinned looks.
+  const qp = typeof location !== "undefined" ? new URLSearchParams(location.search).get("hour") : null;
+  const h = qp
+    ? Math.max(0, Math.min(24, parseFloat(qp) || 0))
+    : now.getHours() + now.getMinutes() / 60;
   let daylight = 0;
   if (h >= 6 && h <= 20) {
     daylight = Math.sin(((h - 6) / 14) * Math.PI);
@@ -93,9 +99,10 @@ export function worldState(prev: World | null, settings: Settings): World {
   if (!settings.dayNight) daylight = 1;
 
   const world: World = prev ?? {
-    daylight: 1, nightDepth: 0, duskWarm: 0, dawnPink: 0, night: false,
+    hour: h, daylight: 1, nightDepth: 0, duskWarm: 0, dawnPink: 0, night: false,
     season, weather, windT: 0, wind: 0, particles: [], rainJustEnded: false,
   };
+  world.hour = h;
   world.daylight = settings.dayNight ? daylight : 1;
   world.nightDepth = nightDepth;
   world.duskWarm = settings.dayNight ? Math.min(1, duskWarm) : 0;

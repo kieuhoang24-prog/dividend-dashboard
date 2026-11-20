@@ -119,6 +119,7 @@ TARGETS: dict[str, tuple[str, int]] = {
     "trees2-sheet.png": ("cell_median_h", 176), # trees ~88-122px
     "animals-sheet.png": ("cell_median_h", 92), # cow/farmer ~46-52px
     "animals2-sheet.png": ("cell_median_h", 58), # duck 20 … horse 54
+    "sleep-sheet.png": ("cell_median_h", 92),    # sleep poses drawn ~46px
 }
 
 
@@ -147,12 +148,13 @@ def normalize(keyed: Image.Image, name: str) -> Image.Image:
     mode, value = target_for(name)
     if mode == "fixed":
         return keyed.resize((value, value), Image.LANCZOS)
-    if mode == "bbox_w":
+    if mode == "max_side":
+        scale = value / max(keyed.size)
+    elif mode == "bbox_w":
         bbox = keyed.getchannel("A").point(lambda v: 255 if v > 24 else 0).getbbox()
         if not bbox:
             return keyed
-        content_w = bbox[2] - bbox[0]
-        scale = value / content_w
+        scale = value / (bbox[2] - bbox[0])
     else:  # cell_median_h
         grid = (5, 1) if name.startswith("crop-") else (4, 2)
         cells = grid_cells(keyed, grid[0], grid[1])

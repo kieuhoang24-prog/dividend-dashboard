@@ -265,9 +265,14 @@ function soilPlot(ctx: CanvasRenderingContext2D, x: number, y: number, idx: numb
   }
   ctx.fillStyle = C.soilDark;
   for (let i = 0; i < 26; i++) ctx.fillRect(x + 2 + Math.floor(r() * 92), y + 2 + Math.floor(r() * 92), 1, 1);
+  // freshly watered: darker, damp soil with a cool sheen
   if ((wateredUntil[idx] ?? 0) > tick) {
-    ctx.fillStyle = "rgba(30, 16, 6, 0.32)";
+    ctx.fillStyle = "rgba(30, 16, 6, 0.45)";
     ctx.fillRect(x + 1, y + 1, PLOT_W - 2, PLOT_W - 2);
+    ctx.fillStyle = "rgba(130, 170, 225, 0.14)";
+    ctx.fillRect(x + 8, y + 10, 4, 2);
+    ctx.fillRect(x + 46, y + 42, 4, 2);
+    ctx.fillRect(x + 26, y + 66, 4, 2);
   }
   ctx.fillStyle = C.outline;
   ctx.fillRect(x, y, PLOT_W, 1);
@@ -318,7 +323,7 @@ function pondRect(height: number): Rect {
 }
 
 /* ── critters ─────────────────────────────────────────────── */
-type CritterKind = "chicken" | "pig" | "cow" | "farmer" | "duck" | "cat" | "horse" | "goat" | "rabbit";
+type CritterKind = "chicken" | "pig" | "cow" | "farmer" | "duck" | "cat" | "horse" | "goat" | "rabbit" | "dog";
 
 const CRITTER_DEFS: Record<CritterKind, { n: number; speed: number; size: number }> = {
   chicken: { n: 3, speed: 10, size: 18 },
@@ -330,6 +335,7 @@ const CRITTER_DEFS: Record<CritterKind, { n: number; speed: number; size: number
   horse: { n: 1, speed: 5, size: 54 },
   goat: { n: 1, speed: 5, size: 34 },
   rabbit: { n: 1, speed: 10, size: 16 },
+  dog: { n: 1, speed: 8, size: 30 },
 };
 
 interface Critter {
@@ -341,19 +347,58 @@ interface Critter {
   pause: number;
   tick: number;
   face: 1 | -1;
+  mood: number;
+  sleep: boolean;
 }
 let critters: Critter[] | null = null;
 
 interface Butterfly { x: number; y: number; tx: number; ty: number; tick: number }
 let butterflies: Butterfly[] | null = null;
 
-let brain: { plotIdx: number; mode: "walk" | "water" | "harvest" | "plant"; actionLeft: number; stroll: { x: number; y: number } | null } | null = null;
+// ── emote bubbles (♪ ♥ ! Zz) ──
+type EmoteKind = "heart" | "note" | "alert" | "zzz";
+interface Emote { kind: EmoteKind; x: number; y: number; life: number }
+let emotes: Emote[] = [];
+
+function spawnEmote(kind: EmoteKind, x: number, y: number, life = 7): void {
+  if (emotes.length < 12) emotes.push({ kind, x, y, life });
+}
+
+function homeFor(kind: CritterKind, fieldBottom: number): { x: number; y: number } | null {
+  switch (kind) {
+    case "chicken": return { x: 150, y: fieldBottom - 10 };
+    case "cow": return { x: 600, y: fieldBottom - 26 };
+    case "horse": return { x: 560, y: fieldBottom - 44 };
+    case "pig": return { x: 540, y: fieldBottom - 18 };
+    case "goat": return { x: 612, y: fieldBottom - 22 };
+    case "rabbit": return { x: 60, y: FIELD_TOP - 40 };
+    case "duck": return { x: 500, y: FIELD_TOP + 26 };
+    case "dog": return { x: STUB_X + 34, y: FIELD_TOP + 48 };
+    default: return null; // the cat curls up wherever it is
+  }
+}
+
+let doorPos = { x: 0, y: 0 };
+let farmerVanished = false;
+let rainingNow = false;
+let truffle: { x: number; y: number; until: number } | null = null;
+let crow: { x: number; y: number; vx: number; vy: number; state: "fly" | "peck" | "flee"; left: number } | null = null;
+
+let brain: { plotIdx: number; mode: "walk" | "water" | "harvest" | "plant" | "weed" | "sleep"; actionLeft: number; stroll: { x: number; y: number } | null; roundWatered: number } | null = null;
 let prevLevel = 0;
 const prevNext = new Map<string, string>();
 let rainbowUntil = -999;
 let egg: { x: number; y: number; until: number } | null = null;
 
 function critterCell(c: Critter): PropName {
+  if (c.sleep) {
+    if (c.kind === "cow") return "cow-lying";
+    if (c.kind === "chicken") return "chicken-sleep";
+    if (c.kind === "duck") return "duck-sleep";
+    if (c.kind === "cat") return "cat-sleep";
+    if (c.kind === "dog") return "dog";
+    return c.kind === "pig" ? "pig-root" : (c.kind as PropName);
+  }
   if (c.pause > 0) {
     if (c.kind === "chicken") return "chicken-peck";
     if (c.kind === "pig") return "pig-root";
@@ -366,13 +411,18 @@ function critterCell(c: Critter): PropName {
       if (b.mode === "water") return c.tick % 4 < 2 ? "farmer-water1" : "farmer-water2";
       if (b.mode === "harvest") return c.tick % 4 < 2 ? "farmer-harvest1" : "farmer-harvest2";
       if (b.mode === "plant") return c.tick % 4 < 2 ? "farmer-seed1" : "farmer-seed2";
-      return c.tick % 4 < 2 ? "farmer-idle" : "farmer-hoe";
+      if (b.mode === "weed") return "farmer-hoe";
+      return "farmer-idle";
     }
     return "goat";
   }
-  if (c.kind === "farmer") return c.tick % 4 < 2 ? "farmer-walk1" : "farmer-walk2";
+  if (c.kind === "farmer") {
+    if (rainingNow) return "farmer-rain";
+    return c.tick % 4 < 2 ? "farmer-walk1" : "farmer-walk2";
+  }
   if (c.kind === "cat") return "cat-walk";
   if (c.kind === "duck") return "duck";
+  if (c.kind === "dog") return "dog-walk";
   if (c.kind === "horse") return "horse";
   return c.kind as PropName;
 }
@@ -430,6 +480,14 @@ function updateCritters(
   tick: number,
 ): void {
   const r = rng(77 + Math.floor(world.windT * 100));
+  // daily rhythm state
+  const h = world.hour;
+  const rainDay = world.weather === "rain";
+  const homesActive = h >= 17 || h < 5.5; // animals path home after 17:00
+  const farmerHidden = h >= 19.8 || h < 6.4;
+  const morningRound = h >= 6.4 && h < 10 && !rainDay;
+  rainingNow = rainDay;
+  farmerVanished = farmerHidden && brain?.mode === "sleep";
   if (!critters) {
     const spawnAt: Record<CritterKind, [number, number]> = {
       chicken: [150, height - 96],
@@ -441,6 +499,7 @@ function updateCritters(
       horse: [585, height - 178],
       goat: [650, height - 174],
       rabbit: [64, FIELD_TOP - 46],
+      dog: [STUB_X + 34, FIELD_TOP + 48],
     };
     critters = [];
     for (const [kind, def] of Object.entries(CRITTER_DEFS) as [CritterKind, { n: number; speed: number; size: number }][]) {
@@ -448,11 +507,11 @@ function updateCritters(
       if (kind === "duck" && level < 4) continue;
       for (let i = 0; i < def.n; i++) {
         const [sx, sy] = spawnAt[kind];
-        critters.push({ kind, x: sx + i * 24, y: sy + i * 9, tx: sx, ty: sy, pause: i, tick: i * 2, face: 1 });
+        critters.push({ kind, x: sx + i * 24, y: sy + i * 9, tx: sx, ty: sy, pause: i, tick: i * 2, face: 1, mood: 0, sleep: false });
       }
     }
   }
-  if (!brain) brain = { plotIdx: 0, mode: "walk", actionLeft: 0, stroll: null };
+  if (!brain) brain = { plotIdx: 0, mode: "walk", actionLeft: 0, stroll: null, roundWatered: 0 };
 
   // butterflies over the flower zones; the cat hunts the nearest one
   if (!butterflies) {
@@ -497,10 +556,113 @@ function updateCritters(
     }
   }
 
-  for (const c of critters) {
+    // crow swoop: goes for a ripe plot; the scarecrow scares it off
+    const readyPlots = plotRects(holdings).filter((_, i) => holdings[i].growth?.ready);
+    if (!crow && tick % 160 === 60 && readyPlots.length) {
+      const target = readyPlots[Math.floor(r() * readyPlots.length)];
+      crow = {
+        x: width + 20, y: 90,
+        vx: -6, vy: (target.y + 20 - 90) / Math.max(1, (width + 20 - target.x - 40) / 6),
+        state: "fly", left: 0,
+      };
+      (crow as unknown as { target: { x: number; y: number; guarded: boolean } }).target = {
+        x: target.x + PLOT_W / 2,
+        y: target.y + 24,
+        guarded: Math.hypot(target.x - 318, target.y - FIELD_TOP - 40) < 130,
+      };
+    }
+    if (crow) {
+      const tgt = (crow as unknown as { target: { x: number; y: number; guarded: boolean } }).target;
+      if (crow.state === "fly") {
+        crow.x += crow.vx;
+        crow.y += crow.vy;
+        if (Math.hypot(crow.x - tgt.x, crow.y - tgt.y) < 14) {
+          if (tgt.guarded) {
+            crow.state = "flee";
+            spawnEmote("alert", 318, FIELD_TOP + 26);
+          } else {
+            crow.state = "peck";
+            crow.left = 4;
+          }
+        }
+      } else if (crow.state === "peck") {
+        crow.left--;
+        if (tick % 2 === 0 && world.particles.length < 200) {
+          burst(world, "seed", crow.x, crow.y + 6, 1, ["#54381f"], 0.6);
+        }
+        if (crow.left <= 0) crow.state = "flee";
+      } else {
+        crow.x += 7;
+        crow.y -= 4;
+        if (crow.x > width + 30) crow = null;
+      }
+    }
+
+    for (const c of critters) {
     const speed = CRITTER_DEFS[c.kind].speed;
     c.x = Math.max(18, Math.min(width - 18, c.x));
     c.y = Math.max(70, Math.min(height - 20, c.y));
+
+    // ── daily rhythm ──
+    // animals sleep when it's deep night; they path home at dusk
+    if (homesActive) {
+      if (!c.sleep && c.kind !== "cat") {
+        c.sleep = true;
+        if (r() < 0.4) spawnEmote("note", c.x, c.y - 18);
+      }
+      // walk to the home anchor once, then settle
+      const home = homeFor(c.kind, height - 90);
+      if (home && Math.hypot(home.x - c.x, home.y - c.y) > 14) {
+        c.tx = home.x;
+        c.ty = home.y;
+        if (!tryStep(c, c.tx, c.ty, blocked, width, height, speed)) {
+          c.sleep = true;
+        }
+        continue;
+      }
+      // settled at home: sleep, occasional Zz
+      if (tick % 14 === 0 && r() < 0.6) spawnEmote("zzz", c.x, c.y - 16, 8);
+      continue;
+    } else if (c.sleep) {
+      c.sleep = false;
+      if (r() < 0.5) spawnEmote("note", c.x, c.y - 18);
+    }
+    if (world.nightDepth > 0.45 && c.kind !== "farmer") {
+      // deep night before homes activate: settle in place with Zz
+      if (tick % 14 === 0) spawnEmote("zzz", c.x, c.y - 16, 8);
+      continue;
+    }
+
+    // ── farmer schedule ──
+    if (c.kind === "farmer") {
+      if (farmerHidden) {
+        // walk home, then vanish inside the manor for the night
+        if (Math.hypot(doorPos.x - c.x, doorPos.y - c.y) > 12) {
+          c.tx = doorPos.x;
+          c.ty = doorPos.y;
+          tryStep(c, c.tx, c.ty, blocked, width, height, speed);
+          continue;
+        }
+        brain!.mode = "sleep";
+        continue;
+      }
+      if (brain!.mode === "sleep") brain!.mode = "walk"; // dawn: back to work
+      // rain day: skip the watering round — crops are watered by the rain
+      if (rainDay && brain!.roundWatered !== tick - (tick % 1000)) {
+        brain!.roundWatered = tick - (tick % 1000);
+        for (let i = 0; i < holdings.length; i++) wateredUntil[i] = tick + 2500;
+      }
+      // morning: the watering round comes first
+      if (morningRound && brain!.mode !== "water" && brain!.roundWatered !== tick - (tick % 1000)) {
+        brain!.mode = "water";
+        brain!.stroll = null;
+        const rect = plotRects(holdings)[brain!.plotIdx];
+        if (rect) {
+          c.tx = rect.x + PLOT_W / 2;
+          c.ty = rect.y + PLOT_W - 8;
+        }
+      }
+    }
     if (c.pause > 0) {
       c.pause--;
       if (c.kind === "farmer" && c.pause === 0) {
@@ -515,6 +677,9 @@ function updateCritters(
           }
         } else {
           brain!.plotIdx = (brain!.plotIdx + 1) % Math.max(1, holdings.length);
+          if (brain!.plotIdx === 0 && morningRound) {
+            brain!.roundWatered = tick - (tick % 1000); // morning round complete
+          }
           if (brain!.plotIdx === 0) {
             // full tour done: take a stroll anywhere on the map first
             pickTarget(c, blocked, r, width, height, level);
@@ -552,7 +717,11 @@ function updateCritters(
       if (Math.hypot(c.tx - c.x, c.ty - c.y) < 10 && holdings.length) {
         const h = holdings[brain!.plotIdx];
         const rect2 = plotRects(holdings)[brain!.plotIdx];
-        if (h?.growth?.ready) {
+        if (morningRound) {
+          // the morning round waters every plot before anything else
+          brain!.mode = "water";
+          brain!.actionLeft = 3;
+        } else if (h?.growth?.ready) {
           brain!.mode = "harvest";
           brain!.actionLeft = 3;
           burst(world, "sparkle", rect2.x + PLOT_W / 2, rect2.y + 24, 14, ["#f2a63b", "#e8c547", "#ffffff"], 1.6);
@@ -562,12 +731,13 @@ function updateCritters(
           brain!.actionLeft = 2;
           burst(world, "seed", rect2.x + PLOT_W / 2, rect2.y + 40, 8, ["#d9b35c", "#8a5c33"], 1.1);
         } else {
-          brain!.mode = "water";
-          brain!.actionLeft = 3;
+          brain!.mode = "weed";
+          brain!.actionLeft = 2;
+          burst(world, "seed", rect2.x + PLOT_W / 2, rect2.y + 30, 3, ["#54381f"], 0.7);
         }
         c.pause = brain!.actionLeft;
         if (brain!.mode === "water") {
-          wateredUntil[brain!.plotIdx] = tick + 8;
+          wateredUntil[brain!.plotIdx] = tick + 2500; // damp until the next round
         }
         continue;
       }
@@ -615,6 +785,11 @@ function updateCritters(
       if (c.kind === "chicken" && r() < 0.08 && !egg) {
         egg = { x: c.x + 6, y: c.y, until: world.windT + 40 };
       }
+      if (c.kind === "pig" && r() < 0.3 && !truffle) {
+        truffle = { x: c.x + 10, y: c.y + 2, until: world.windT + 70 };
+        spawnEmote("alert", c.x, c.y - 24);
+        burst(world, "seed", c.x + 10, c.y, 4, ["#54381f", "#8a5c33"], 0.8);
+      }
       pickTarget(c, blocked, r, width, height, level);
       continue;
     }
@@ -640,7 +815,51 @@ export function startleCritter(kind: string, x: number, y: number): void {
   }
 }
 
+/** Pet an animal: ♥ burst, mood up, occasional ♪. */
+export function petCritter(kind: string, x: number, y: number): void {
+  const target = (critters ?? []).find((c) => c.kind === kind && Math.hypot(c.x - x, c.y - y) < 30);
+  if (!target) return;
+  target.mood++;
+  spawnEmote("heart", target.x, target.y - CRITTER_DEFS[target.kind].size - 6);
+  if (target.mood % 3 === 0) spawnEmote("note", target.x + 10, target.y - CRITTER_DEFS[target.kind].size - 12);
+  target.face = target.face === 1 ? -1 : 1;
+}
+
 /* ── pond (level ≥ 4) ─────────────────────────────────────── */
+function ambientColor(world: World, settings: Settings): string {
+  // day = white; night deep blue-purple (contrast survives multiply);
+  // dusk/dawn warm blends; rain desaturates.
+  let r = 255, g = 255, b = 255;
+  const nd = world.nightDepth;
+  r += (96 - r) * nd;
+  g += (116 - g) * nd;
+  b += (190 - b) * nd;
+  if (world.duskWarm > 0.02) {
+    r += (255 - r) * world.duskWarm * 0.55;
+    g += (150 - g) * world.duskWarm * 0.5;
+    b += (80 - b) * world.duskWarm * 0.55;
+  }
+  if (world.dawnPink > 0.02) {
+    r += (255 - r) * world.dawnPink * 0.4;
+    g += (190 - g) * world.dawnPink * 0.4;
+    b += (170 - b) * world.dawnPink * 0.4;
+  }
+  if (world.weather === "rain" && settings.weather) {
+    r *= 0.8;
+    g *= 0.83;
+    b *= 0.9;
+  }
+  return `rgb(${r | 0}, ${g | 0}, ${b | 0})`;
+}
+
+function addLight(ctx: CanvasRenderingContext2D, x: number, y: number, radius: number, color: string): void {
+  const g = ctx.createRadialGradient(x, y, 2, x, y, radius);
+  g.addColorStop(0, color);
+  g.addColorStop(1, color.replace(/[\d.]+\)$/, "0)"));
+  ctx.fillStyle = g;
+  ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+}
+
 function drawPond(ctx: CanvasRenderingContext2D, height: number, tick: number, world: World): void {
   const cx = 600;
   const cy = height - 100;
@@ -695,10 +914,11 @@ export function drawScene(
   scale = 1,
 ): void {
   const { holdings, level, monthlyBeat, settings } = payload;
-  worldRef = worldRef ?? {
-    daylight: 1, nightDepth: 0, duskWarm: 0, dawnPink: 0, night: false, season: "summer", weather: "sunny", windT: 0, wind: 0, particles: [], rainJustEnded: false,
+  const world = worldRef ?? {
+    daylight: 1, nightDepth: 0, duskWarm: 0, dawnPink: 0, night: false, hour: 12,
+    season: "summer" as const, weather: "sunny" as const, windT: 0, wind: 0, particles: [], rainJustEnded: false,
   };
-  const world = worldRef;
+  worldRef = world;
   const tick = sceneTick++;
   const { width, height } = sceneSize(holdings);
   ctx.canvas.width = width * scale;
@@ -730,6 +950,8 @@ export function drawScene(
   drawAsset(ctx, HOUSE_KEY, hx, hy, hw);
   fenceRun(ctx, hx - 26, fy, Math.max(12, gateX - hx - 10));
   fenceRun(ctx, gateX + 14, fy, Math.max(12, hx + hw + 26 - gateX - 14));
+  // farmer's home door (evening walk-in target)
+  doorPos = { x: gateX, y: doorY + 12 };
 
   const mailboxToday = localStorage.getItem(`dd_mailbox_${new Date().toISOString().slice(0, 10)}`) === "1";
   drawPropSprite(ctx, "well", hx - 58, fy + 18, 44);
@@ -919,8 +1141,7 @@ export function drawScene(
   // ── critters ──
   // solids they steer around: manor, windmill, pond water, plot soil (inset
   // so they brush edges but never stand on crops), scarecrow, coop, yard props
-  const solid: Rect[] = [
-    { x: hx - 12, y: hy - 6, w: hw + 24, h: hh + 12 },
+  const solid: Rect[] = [    { x: hx - 12, y: hy - 6, w: hw + 24, h: hh + 12 },
     { x: 602, y: FIELD_TOP + ROW_PITCH + 6, w: 106, h: 156 },
     ...(level >= 4 ? [{ x: 532, y: height - 132, w: 136, h: 64 }] : [{ x: 560, y: height - 160, w: 90, h: 60 }]),
     ...holdings.map((_, i) => ({
@@ -954,6 +1175,7 @@ export function drawScene(
   };
   const drawn = [...critters!].sort((a, b) => a.y - b.y);
   for (const c of drawn) {
+    if (c.kind === "farmer" && farmerVanished) continue; // indoors for the night
     const moving = c.pause <= 0;
     ctx.save();
     ctx.globalAlpha = 0.18;
@@ -962,10 +1184,49 @@ export function drawScene(
     ctx.restore();
     const bob = moving && c.tick % 2 === 0 ? -1 : 0;
     drawPropSprite(ctx, critterCell(c), c.x, c.y + bob, CRITTER_DEFS[c.kind].size, c.face === -1);
+    // sleep emotes
+    if (c.sleep && tick % 12 < 3) spawnEmote("zzz", c.x, c.y - CRITTER_DEFS[c.kind].size - 4, 6);
   }
   for (const b of butterflies!) {
     drawPropSprite(ctx, b.tick % 2 === 0 ? "butterfly-open" : "butterfly-closed", b.x, b.y, 12);
   }
+  // truffle the pig dug up
+  if (truffle) {
+    if (world.windT > truffle.until) truffle = null;
+    else {
+      p(ctx, "#6b4a2b", truffle.x - 3, truffle.y - 2, 6, 4);
+      p(ctx, "#8a5c33", truffle.x - 2, truffle.y - 3, 4, 2);
+      if (tick % 4 === 0) p(ctx, "#f2a63b", truffle.x + 6, truffle.y - 6, 1, 1);
+    }
+  }
+  // crow
+  if (crow) {
+    const flap = tick % 2 === 0;
+    p(ctx, "#20242c", crow.x - 4, crow.y - 1, 7, 3);
+    p(ctx, "#20242c", crow.x - (flap ? 1 : 3), crow.y - (flap ? 4 : 2), 4, 2);
+    p(ctx, "#e8a33c", crow.x + 3, crow.y, 2, 1);
+  }
+  // emote bubbles
+  for (const e of emotes) {
+    p(ctx, C.outline, e.x - 7, e.y - 12, 14, 11);
+    p(ctx, "#f4f1e8", e.x - 6, e.y - 11, 12, 9);
+    p(ctx, C.outline, e.x - 1, e.y, 2, 2);
+    if (e.kind === "heart") {
+      p(ctx, "#d9483b", e.x - 3, e.y - 10, 2, 2);
+      p(ctx, "#d9483b", e.x, e.y - 10, 2, 2);
+      p(ctx, "#d9483b", e.x - 2, e.y - 8, 4, 2);
+      p(ctx, "#d9483b", e.x - 1, e.y - 6, 2, 1);
+    } else if (e.kind === "note") {
+      p(ctx, "#3a6bd9", e.x - 1, e.y - 10, 1, 6);
+      p(ctx, "#3a6bd9", e.x - 2, e.y - 5, 2, 2);
+      p(ctx, "#3a6bd9", e.x + 1, e.y - 11, 1, 5);
+    } else if (e.kind === "alert") {
+      drawText(ctx, "!", e.x - 1, e.y - 11, "#d9483b", 2);
+    } else {
+      drawText(ctx, "Z", e.x - 3, e.y - 11, "#8a97a6", 2);
+    }
+  }
+  emotes = emotes.filter((e) => --e.life > 0).map((e) => ({ ...e, y: e.kind === "zzz" ? e.y - 0.2 : e.y }));
   if (egg) {
     if (world.windT > egg.until) egg = null;
     else {
@@ -1022,30 +1283,35 @@ export function drawScene(
   updateParticles(world, width, height);
   drawParticles(ctx, world);
 
-  // ── atmosphere: smooth continuous day/night, weather tint, clouds ──
-  // night depth (cool blue, max 0.22 — readable; fireflies + windows carry it)
-  if (world.nightDepth > 0.02) {
-    ctx.fillStyle = `rgba(18, 30, 62, ${(world.nightDepth * 0.22).toFixed(3)})`;
+  // ── atmosphere: real two-pass lighting (multiply ambient + additive lights) ──
+  // ambient multiply: the scene darkens toward the time color while contrast
+  // survives — never a flat black overlay.
+  const amb = ambientColor(world, settings);
+  ctx.globalCompositeOperation = "multiply";
+  ctx.fillStyle = amb;
+  ctx.fillRect(0, 0, width, height);
+  ctx.globalCompositeOperation = "source-over";
+  // additive light sources: they brighten through the darkness
+  const lightA = world.nightDepth;
+  if (lightA > 0.03) {
+    ctx.globalCompositeOperation = "lighter";
+    // moon + moonlight pool
+    const mg = ctx.createRadialGradient(width * 0.42, 26, 6, width * 0.42, 26, 120);
+    mg.addColorStop(0, `rgba(190, 208, 255, ${0.4 * lightA})`);
+    mg.addColorStop(1, "rgba(190, 208, 255, 0)");
+    ctx.fillStyle = mg;
     ctx.fillRect(0, 0, width, height);
-    if (world.nightDepth > 0.5) {
-      // warm windows glowing through the night
-      ctx.fillStyle = `rgba(255, 190, 90, ${(world.nightDepth * 0.55).toFixed(3)})`;
-      ctx.fillRect(hx + 14, hy + hh * 0.62, 8, 6);
-      ctx.fillRect(hx + hw - 24, hy + hh * 0.62, 8, 6);
-    }
-  }
-  // dusk warm / dawn pink fades
-  if (world.duskWarm > 0.02) {
-    ctx.fillStyle = `rgba(255, 140, 60, ${(world.duskWarm * 0.12).toFixed(3)})`;
-    ctx.fillRect(0, 0, width, height);
-  }
-  if (world.dawnPink > 0.02) {
-    ctx.fillStyle = `rgba(255, 170, 150, ${(world.dawnPink * 0.1).toFixed(3)})`;
-    ctx.fillRect(0, 0, width, height);
-  }
-  if (world.weather === "rain" && settings.weather) {
-    ctx.fillStyle = "rgba(40, 60, 90, 0.16)";
-    ctx.fillRect(0, 0, width, height);
+    p(ctx, "#dfe6ff", width * 0.42 - 5, 18, 9, 9);
+    p(ctx, "#aab8d8", width * 0.42 - 3, 20, 3, 3);
+    // lantern at the path end (flicker)
+    const flick = tick % 5 === 0 ? 0.82 : 1;
+    addLight(ctx, hx - 14, fy - 8, 46, `rgba(255, 190, 105, ${0.5 * lightA * flick})`);
+    // manor windows
+    addLight(ctx, hx + 18, hy + hh * 0.64, 34, `rgba(255, 180, 90, ${0.45 * lightA})`);
+    addLight(ctx, hx + hw - 20, hy + hh * 0.64, 34, `rgba(255, 180, 90, ${0.4 * lightA})`);
+    // coop light
+    addLight(ctx, 150, fieldBottom - 18, 40, `rgba(255, 200, 130, ${0.35 * lightA})`);
+    ctx.globalCompositeOperation = "source-over";
   }
   const clx = ((tick * 2) % (width + 360)) - 180;
   ctx.save();

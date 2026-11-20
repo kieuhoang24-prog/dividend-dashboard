@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import type { PortfolioPayload } from "../../shared/types";
-import { drawScene, plotRects, critterPositions, startleCritter, sceneSize } from "../lib/farm";
+import { drawScene, plotRects, critterPositions, petCritter, sceneSize } from "../lib/farm";
 import { loadAssets } from "../lib/assets";
 import { money } from "../lib/format";
-import { worldState, startAmbience, stopAmbience, type World, type Settings, loadSettings, saveSettings } from "../lib/world";
+import { worldState, startAmbience, stopAmbience, type World, type Settings, type Season, type Weather, type Particle, loadSettings, saveSettings } from "../lib/world";
 
 interface Props {
   data: PortfolioPayload;
@@ -45,7 +45,8 @@ export function FarmView({ data }: { data: PortfolioPayload }) {
 
   useEffect(() => {
     const world = worldRef.current ?? {
-      daylight: 1, nightDepth: 0, duskWarm: 0, dawnPink: 0, night: false, season: "summer", weather: "sunny", windT: 0, wind: 0, particles: [], rainJustEnded: false,
+      daylight: 1, nightDepth: 0, duskWarm: 0, dawnPink: 0, night: false, hour: 12,
+      season: "summer" as Season, weather: "sunny" as Weather, windT: 0, wind: 0, particles: [] as Particle[], rainJustEnded: false,
     };
     worldRef.current = worldState(world, settingsRef.current);
     startAmbience(worldRef.current, settingsRef.current.sound);
@@ -107,7 +108,7 @@ export function FarmView({ data }: { data: PortfolioPayload }) {
     // critter reactions first
     for (const c of critterPositions()) {
       if (Math.hypot(c.x - sx, c.y - sy) < 30) {
-        startleCritter(c.kind, sx, sy);
+        petCritter(c.kind, sx, sy);
         return;
       }
     }
