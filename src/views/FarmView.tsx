@@ -18,7 +18,7 @@ export function FarmView({ data }: { data: PortfolioPayload }) {
   const [settings, setSettings] = useState<Settings>(settingsRef.current);
   const [assetsReady, setAssetsReady] = useState(false);
   const [frame, setFrame] = useState(0);
-  const [selected, setSelected] = useState<{ symbol: string; name: string; x: number; y: number; pct: number } | null>(null);
+  const [selected, setSelected] = useState<{ symbol: string; name: string; x: number; y: number; pct: number; daysTo: number; payingNow: boolean } | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -123,6 +123,10 @@ export function FarmView({ data }: { data: PortfolioPayload }) {
           x: rectHit.x + rectHit.w / 2,
           y: rectHit.y,
           pct: h.yieldPct,
+          daysTo: h.growth
+            ? Math.max(0, Math.round((Date.parse(`${h.growth.nextPayout}T12:00:00Z`) - Date.now()) / 86400000))
+            : 0,
+          payingNow: h.growth?.ready ?? false,
         });
         return;
       }
@@ -154,8 +158,10 @@ export function FarmView({ data }: { data: PortfolioPayload }) {
           >
             <b>{selected.symbol}</b> · {selected.name}
             <br />
-            yield {selected.pct.toFixed(1)}% · next payout{" "}
-            {data.holdings.find((h) => h.symbol === selected.symbol)?.growth?.nextPayout ?? "—"}
+            yield {selected.pct.toFixed(1)}% ·{" "}
+            {selected.payingNow
+              ? "paying now"
+              : `pays in ${selected.daysTo}d`}
             <br />
             <button className="btn tiny" onClick={() => setSelected(null)}>CLOSE</button>
           </div>
