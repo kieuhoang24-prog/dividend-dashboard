@@ -18,6 +18,10 @@ export const ASSET_MANIFEST: Record<string, string> = {
   "crop-tulip": "/sprites/crop-tulip.png",
   "props-sheet": "/sprites/props-sheet.png",
   "animals-sheet": "/sprites/animals-sheet.png",
+  "actions-sheet": "/sprites/actions-sheet.png",
+  "props2-sheet": "/sprites/props2-sheet.png",
+  "trees2-sheet": "/sprites/trees2-sheet.png",
+  "animals2-sheet": "/sprites/animals2-sheet.png",
   "ground-grass": "/sprites/ground-grass.png",
   "ground-path": "/sprites/ground-path.png",
 };
@@ -38,7 +42,39 @@ export type PropName =
   | "farmer-idle"
   | "farmer-walk1"
   | "farmer-walk2"
-  | "farmer-hoe";
+  | "farmer-hoe"
+  | "farmer-water1"
+  | "farmer-water2"
+  | "farmer-harvest1"
+  | "farmer-harvest2"
+  | "farmer-seed1"
+  | "farmer-seed2"
+  | "butterfly-open"
+  | "butterfly-closed"
+  | "well"
+  | "coop"
+  | "mailbox"
+  | "crates"
+  | "wind0"
+  | "wind1"
+  | "wind2"
+  | "wind3"
+  | "tree-blossom"
+  | "tree-pine"
+  | "tree-apple"
+  | "tree-elm"
+  | "bed-tulip"
+  | "bed-mixed"
+  | "hay-cart"
+  | "crates2"
+  | "duck"
+  | "duck-flap"
+  | "cat-sit"
+  | "cat-walk"
+  | "horse"
+  | "horse-graze"
+  | "goat"
+  | "rabbit";
 
 interface Cell {
   x: number;
@@ -56,7 +92,7 @@ const cache = new Map<string, Asset>();
 
 function gridFor(key: string): { cols: number; rows: number } | null {
   if (key.startsWith("crop-")) return { cols: 5, rows: 1 };
-  if (key === "props-sheet" || key === "animals-sheet") return { cols: 4, rows: 2 };
+  if (/^(props|animals|actions|props2|trees2|animals2)-sheet$/.test(key)) return { cols: 4, rows: 2 };
   return null;
 }
 
@@ -292,6 +328,38 @@ const PROP_CELLS: Record<string, [string, number, number]> = {
   "farmer-walk1": ["animals-sheet", 1, 1],
   "farmer-walk2": ["animals-sheet", 2, 1],
   "farmer-hoe": ["animals-sheet", 3, 1],
+  "farmer-water1": ["actions-sheet", 0, 0],
+  "farmer-water2": ["actions-sheet", 1, 0],
+  "farmer-harvest1": ["actions-sheet", 2, 0],
+  "farmer-harvest2": ["actions-sheet", 3, 0],
+  "farmer-seed1": ["actions-sheet", 0, 1],
+  "farmer-seed2": ["actions-sheet", 1, 1],
+  "butterfly-open": ["actions-sheet", 2, 1],
+  "butterfly-closed": ["actions-sheet", 3, 1],
+  well: ["props2-sheet", 0, 0],
+  coop: ["props2-sheet", 1, 0],
+  mailbox: ["props2-sheet", 2, 0],
+  crates: ["props2-sheet", 3, 0],
+  wind0: ["props2-sheet", 0, 1],
+  wind1: ["props2-sheet", 1, 1],
+  wind2: ["props2-sheet", 2, 1],
+  wind3: ["props2-sheet", 3, 1],
+  "tree-blossom": ["trees2-sheet", 0, 0],
+  "tree-pine": ["trees2-sheet", 1, 0],
+  "tree-apple": ["trees2-sheet", 2, 0],
+  "tree-elm": ["trees2-sheet", 3, 0],
+  "bed-tulip": ["trees2-sheet", 0, 1],
+  "bed-mixed": ["trees2-sheet", 1, 1],
+  "hay-cart": ["trees2-sheet", 2, 1],
+  crates2: ["trees2-sheet", 3, 1],
+  duck: ["animals2-sheet", 0, 0],
+  "duck-flap": ["animals2-sheet", 1, 0],
+  "cat-sit": ["animals2-sheet", 2, 0],
+  "cat-walk": ["animals2-sheet", 3, 0],
+  horse: ["animals2-sheet", 0, 1],
+  "horse-graze": ["animals2-sheet", 1, 1],
+  goat: ["animals2-sheet", 2, 1],
+  rabbit: ["animals2-sheet", 3, 1],
 };
 
 /** Draw one cell of the props/animals sheets, bottom-center anchored,

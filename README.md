@@ -8,6 +8,30 @@ Inspired by [the Trading 212 pixel-art farm on Reddit](https://www.reddit.com/r/
 but wired to your own **Ghostfolio** instance, fully local, and designed to sit in a
 Home Assistant dashboard.
 
+
+## Living world (current)
+
+The farm is a real-time scene driven by your Ghostfolio data:
+
+- **Per-stock growth cycles** — each stock plants seeds after its own payout
+  and grows through 5 Harvest-Moon stages, ripening exactly when its next
+  dividend is due (Golden star crop for your top yielder)
+- **The farmer tends plots** — watering (damp soil after), harvesting READY
+  stocks with a sparkle, planting fresh seeds
+- **Living critters** — chickens, pig, cow, horse, goat, rabbit, ducks, a cat
+  that chases butterflies — all roaming with steering and obstacle avoidance
+- **Weather + day/night** — date-seeded weather (rain with streaks and splashes),
+  real-clock dusk/night tints, fireflies, lit windows at night
+- **Seasons** — spring blossom, summer green, autumn colors + falling leaves,
+  winter snow with a snowman; October pumpkins by the manor
+- **Data-driven events** — dividend-day fireworks + mailbox flag, rainbow after
+  rain in a strong month, milestone scaffolding toward the next farm level
+- **Scene dressing** — windmill, orchard, well, coop, flower beds, weathervane,
+  harvest countdown board, pond with lily pads and jumping fish
+- **Interactive** — click a plot for that stock's details, startle the animals,
+  sound ambience and cinematic camera toggles
+- **Home Assistant** — `/api/next-payouts` returns each stock's payout schedule
+
 ## What you get
 
 | View | What it shows |

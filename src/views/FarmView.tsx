@@ -1,13 +1,24 @@
 import { useEffect, useRef, useState } from "react";
 import type { PortfolioPayload } from "../../shared/types";
-import { drawScene } from "../lib/farm";
+import { drawScene, plotRects, critterPositions, startleCritter, sceneSize } from "../lib/farm";
 import { loadAssets } from "../lib/assets";
 import { money } from "../lib/format";
+import { worldState, startAmbience, stopAmbience, type World, type Settings, loadSettings, saveSettings } from "../lib/world";
+
+interface Props {
+  data: PortfolioPayload;
+  onRefresh: () => void;
+  refreshing: boolean;
+}
 
 export function FarmView({ data }: { data: PortfolioPayload }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [frame, setFrame] = useState(0);
+  const worldRef = useRef<World | null>(null);
+  const settingsRef = useRef<Settings>(loadSettings());
+  const [settings, setSettings] = useState<Settings>(settingsRef.current);
   const [assetsReady, setAssetsReady] = useState(false);
+  const [frame, setFrame] = useState(0);
+  const [selected, setSelected] = useState<{ symbol: string; name: string; x: number; y: number; pct: number } | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -20,8 +31,7 @@ export function FarmView({ data }: { data: PortfolioPayload }) {
   }, []);
 
   useEffect(() => {
-    // keep ticking even in hidden tabs (throttled to ~1s there — cheap) so the
-    // farm never freezes; a visibility change forces an immediate redraw
+    // keep ticking even in hidden tabs; visibility change forces an instant redraw
     const id = setInterval(() => setFrame((f) => (f + 1) % 4), 700);
     const onVis = () => {
       if (!document.hidden) setFrame((f) => f + 1);
@@ -34,19 +44,121 @@ export function FarmView({ data }: { data: PortfolioPayload }) {
   }, []);
 
   useEffect(() => {
-    if (!assetsReady) return;
-    const ctx = canvasRef.current?.getContext("2d");
-    if (!ctx) return;
-    drawScene(ctx, { holdings: data.holdings, level: data.farm.level }, 1, frame);
-  }, [data, frame, assetsReady]);
+    const world = worldRef.current ?? {
+      hour: 12, season: "summer", weather: "sunny", night: false, windT: 0, wind: 0, particles: [], rainJustEnded: false,
+    };
+    worldRef.current = worldState(world, settingsRef.current);
+    startAmbience(worldRef.current, settingsRef.current.sound);
+    return () => {
+      stopAmbience();
+    };
+  }, [settings.sound]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const nextPct = data.farm.next ? data.farm.progressPct : 100;
-  const aria = data.holdings.map((h) => `${h.symbol} ${money(data, h.t12mDividend)} per year`).join(", ");
+  useEffect(() => {
+    if (!assetsReady) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
+    const last = data.calendar[data.calendar.length - 1];
+    const avgMonthly = data.totals.annualDividend / 12;
+    drawScene(
+      ctx,
+      {
+        holdings: data.holdings,
+        level: data.farm.level,
+        monthlyBeat: last.total > avgMonthly,
+        settings: settingsRef.current,
+        farmNext: data.farm.next ? { progressPct: data.farm.progressPct } : undefined,
+      },
+      1,
+    );
+  }, [data, assetsReady, selected, settings, frame]);
+
+  const toggle = (key: keyof Settings) => {
+    const next = { ...settingsRef.current, [key]: !settingsRef.current[key] };
+    settingsRef.current = next;
+    saveSettings(next);
+    setSettings(next);
+    if (key === "sound" && worldRef.current) startAmbience(worldRef.current, next.sound);
+  };
+
+  // cinematic slow pan/zoom on the canvas element itself
+  useEffect(() => {
+    if (!settings.cinematic) {
+      if (canvasRef.current) canvasRef.current.style.transform = "";
+      return;
+    }
+    let t = 0;
+    const id = setInterval(() => {
+      t += 0.05;
+      if (canvasRef.current) {
+        canvasRef.current.style.transform = `scale(1.04) translate(${Math.sin(t) * 8}px, ${Math.cos(t * 0.8) * 5}px)`;
+      }
+    }, 120);
+    return () => clearInterval(id);
+  }, [settings.cinematic]);
+
+  const onCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const sx = ((e.clientX - rect.left) * canvas.width) / rect.width;
+    const sy = ((e.clientY - rect.top) * canvas.height) / rect.height;
+    // critter reactions first
+    for (const c of critterPositions()) {
+      if (Math.hypot(c.x - sx, c.y - sy) < 30) {
+        startleCritter(c.kind, sx, sy);
+        return;
+      }
+    }
+    // plot details
+    const rectHit = plotRects(data.holdings).find((r) => sx >= r.x && sx <= r.x + r.w && sy >= r.y && sy <= r.y + r.h);
+    if (rectHit) {
+      const h = data.holdings.find((x) => x.symbol === rectHit.symbol);
+      if (h) {
+        setSelected({
+          symbol: h.symbol,
+          name: h.name,
+          x: rectHit.x + rectHit.w / 2,
+          y: rectHit.y,
+          pct: h.yieldPct,
+        });
+        return;
+      }
+    }
+    setSelected(null);
+  };
+
+  const nextPayout = data.holdings
+    .map((h) => h.growth?.nextPayout)
+    .filter(Boolean)
+    .sort()[0];
 
   return (
     <div>
-      <div className="farm-wrap">
-        <canvas ref={canvasRef} role="img" aria-label={`Farm plots: ${aria}`} />
+      <div className="farm-wrap" style={{ position: "relative" }}>
+        <canvas
+          ref={canvasRef}
+          onClick={onCanvasClick}
+          role="img"
+          aria-label={`Farm plots: ${data.holdings.map((h) => `${h.symbol} ${money(data, h.t12mDividend)} per year`).join(", ")}`}
+        />
+        {selected && (
+          <div
+            className="plot-panel"
+            style={{
+              left: `${(selected.x / sceneSize(data.holdings).width) * 100}%`,
+              top: `${(selected.y / sceneSize(data.holdings).height) * 100}%`,
+            }}
+          >
+            <b>{selected.symbol}</b> · {selected.name}
+            <br />
+            yield {selected.pct.toFixed(1)}% · next payout{" "}
+            {data.holdings.find((h) => h.symbol === selected.symbol)?.growth?.nextPayout ?? "—"}
+            <br />
+            <button className="btn tiny" onClick={() => setSelected(null)}>CLOSE</button>
+          </div>
+        )}
       </div>
 
       <div className="farm-stats">
@@ -66,20 +178,19 @@ export function FarmView({ data }: { data: PortfolioPayload }) {
               : "max level reached"}
           </div>
         </div>
+        <div className="stat">
+          <div className="v">{nextPayout ?? "—"}</div>
+          <div className="k">next harvest</div>
+        </div>
       </div>
 
-      {data.farm.next && (
-        <div className="progress" title={`${nextPct}% to ${data.farm.next.name}`}>
-          <div style={{ width: `${nextPct}%` }} />
-          <div className="p-label">
-            {nextPct}% → {data.farm.next.name}
-          </div>
-        </div>
-      )}
-
+      <div className="quick-toggles">
+        <button className={`qt ${settings.sound ? "on" : ""}`} onClick={() => toggle("sound")}>{settings.sound ? "♪ SOUND ON" : "♪ SOUND OFF"}</button>
+        <button className={`qt ${settings.cinematic ? "on" : ""}`} onClick={() => toggle("cinematic")}>CINEMATIC</button>
+      </div>
       <p className="hint">
-        Each plot is one holding. The better it pays, the riper its crop grows; hit the annual
-        dividend milestones and the whole farm levels up.
+        Each plot is one stock on its own dividend cycle — seeds after a payout, ripe when the next
+        one is due. The farmer waters and harvests on schedule; click a plot for details.
       </p>
     </div>
   );

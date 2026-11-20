@@ -1,12 +1,8 @@
-// Scene composer: painted grass/soil/path/pond (procedural) + generated
-// Stardew-style sprites (house tiers, oak tree, crop sheets, props).
+// Scene composer: textured ground, seasonal palettes, 3-column field with
+// per-stock growth stages, manor + yard, orchard, windmill, pond, critters
+// (farmer AI: water/harvest/plant per stock), particles, day/night, weather.
 
-import {
-  C,
-  TILE,
-  CROP_NAMES,
-  drawSign,
-} from "./art.js";
+import { C, TILE, CROP_NAMES, drawSign, drawText } from "./art.js";
 import {
   drawAsset,
   assetAspect,
@@ -17,15 +13,27 @@ import {
   type PropName,
 } from "./assets.js";
 import type { HoldingRow } from "../../shared/types";
+import {
+  type Season,
+  type Settings,
+  type World,
+  spawnAmbient,
+  updateParticles,
+  drawParticles,
+  burst,
+  floatText,
+  firework,
+} from "./world.js";
 
 export const SCENE_W = 720;
 const FIELD_TOP = 152;
-const PLOT_W = 3 * TILE; // 96
+const PLOT_W = 3 * TILE;
 const ROW_PITCH = PLOT_W + 44;
 const COLS = 3;
 const COL_X = [26, 196, 366];
-const STUB_X = Math.round((COL_X[0] + PLOT_W + COL_X[1]) / 2); // gutter walkway between col 1 and 2
+const STUB_X = Math.round((COL_X[0] + PLOT_W + COL_X[1]) / 2);
 const HOUSE_KEY = "house-manor";
+const HOUSE_W = [178, 190, 200];
 
 function rng(seed: number): () => number {
   let s = seed >>> 0;
@@ -42,6 +50,17 @@ export function cropName(cropIndex: number): string {
 export function sceneSize(holdings: HoldingRow[]): { width: number; height: number } {
   const rows = Math.max(1, Math.ceil(holdings.length / COLS));
   return { width: SCENE_W, height: FIELD_TOP + rows * ROW_PITCH + 90 };
+}
+
+export function plotRects(holdings: HoldingRow[]): { symbol: string; name: string; x: number; y: number; w: number; h: number }[] {
+  return holdings.map((h, i) => ({
+    symbol: h.symbol,
+    name: h.name,
+    x: COL_X[i % COLS],
+    y: FIELD_TOP + Math.floor(i / COLS) * ROW_PITCH,
+    w: PLOT_W,
+    h: PLOT_W,
+  }));
 }
 
 interface Rect { x: number; y: number; w: number; h: number }
@@ -63,8 +82,9 @@ function ellipseFill(ctx: CanvasRenderingContext2D, cx: number, cy: number, rx: 
   }
 }
 
-/* ── grass ────────────────────────────────────────────────── */
-function drawTuft(ctx: CanvasRenderingContext2D, x: number, y: number, variant: number): void {  if (variant === 0) {
+/* ── ground ───────────────────────────────────────────────── */
+function drawTuft(ctx: CanvasRenderingContext2D, x: number, y: number, variant: number): void {
+  if (variant === 0) {
     p(ctx, C.gDark, x, y + 2, 1, 3);
     p(ctx, C.gLight, x + 2, y + 1, 1, 4);
     p(ctx, C.gDark, x + 4, y + 2, 1, 3);
@@ -96,16 +116,13 @@ function drawTallGrass(ctx: CanvasRenderingContext2D, x: number, y: number): voi
   p(ctx, C.gDark, x, y + 7, 8, 1);
 }
 
-function paintGrass(ctx: CanvasRenderingContext2D, w: number, h: number): void {
+function paintGrass(ctx: CanvasRenderingContext2D, w: number, h: number, world: World, tick: number): void {
   const r = rng(11);
   const textured = hasGround("ground-grass");
-  if (textured) {
-    // generated SDV-style texture, mirror-tiled so there are no seams
-    drawGroundTiled(ctx, "ground-grass", 0, 0, w, h, 192);
-  } else {
+  if (textured) drawGroundTiled(ctx, "ground-grass", 0, 0, w, h, 192);
+  else {
     ctx.fillStyle = C.gBase;
     ctx.fillRect(0, 0, w, h);
-    // tonal patchwork: 8px noise cells in three greens
     for (let cy = 0; cy < h; cy += 8) {
       for (let cx = 0; cx < w; cx += 8) {
         const t = r();
@@ -113,43 +130,44 @@ function paintGrass(ctx: CanvasRenderingContext2D, w: number, h: number): void {
         ctx.fillRect(cx, cy, 8, 8);
       }
     }
-    // large soft meadow/shade patches
-    ctx.save();
-    ctx.globalAlpha = 0.1;
-    for (let i = 0; i < 10; i++) {
-      ctx.fillStyle = r() > 0.5 ? C.gLight : C.gDark;
-      ellipseFill(ctx, Math.floor(r() * w), Math.floor(r() * h), 18 + r() * 34, 10 + r() * 16);
-    }
-    ctx.restore();
-    // pixel dither
-    for (let i = 0; i < (w * h) / 40; i++) {
-      const x = Math.floor(r() * w);
-      const y = Math.floor(r() * h);
-      ctx.fillStyle = r() > 0.5 ? C.gLight : C.gDark;
-      ctx.fillRect(x, y, 2, 1);
-    }
   }
-  // worn dirt patches, dithered into the grass
-  for (let i = 0; i < (textured ? 4 : 6); i++) {
+  for (let i = 0; i < 4; i++) {
     const cx = Math.floor(r() * w);
     const cy = Math.floor(r() * h);
     ctx.save();
-    ctx.globalAlpha = 0.4;
+    ctx.globalAlpha = 0.35;
     ctx.fillStyle = C.soil;
     ellipseFill(ctx, cx, cy, 10 + r() * 16, 5 + r() * 8);
     ctx.restore();
-    for (let d = 0; d < 14; d++) {
-      p(ctx, C.soilDark, cx - 10 + Math.floor(r() * 20), cy - 6 + Math.floor(r() * 12), 1, 1);
-    }
+    for (let d = 0; d < 12; d++) p(ctx, C.soilDark, cx - 10 + Math.floor(r() * 20), cy - 6 + Math.floor(r() * 12), 1, 1);
   }
-  // life layer: tufts, tall clumps, daisies (lighter counts over the texture)
-  for (let i = 0; i < (textured ? 60 : 100); i++) drawTuft(ctx, Math.floor(r() * (w - 8)), Math.floor(r() * (h - 10)), Math.floor(r() * 3));
-  for (let i = 0; i < (textured ? 10 : 16); i++) drawTallGrass(ctx, Math.floor(r() * (w - 10)), Math.floor(r() * (h - 12)));
+  for (let i = 0; i < 55; i++) drawTuft(ctx, Math.floor(r() * (w - 8)), Math.floor(r() * (h - 10)), Math.floor(r() * 3));
+  for (let i = 0; i < 10; i++) drawTallGrass(ctx, Math.floor(r() * (w - 10)), Math.floor(r() * (h - 12)));
   for (let i = 0; i < 34; i++) {
     const x = Math.floor(r() * (w - 4));
     const y = Math.floor(r() * (h - 4));
     p(ctx, C.white, x, y, 2, 2);
     p(ctx, C.wheat, x, y, 1, 1);
+  }
+  // wind ripple sweeping the field
+  if (tick % 2 === 0) {
+    const bandY = ((tick * 13) % (h + 160)) - 80;
+    ctx.save();
+    ctx.globalAlpha = 0.05;
+    ctx.fillStyle = C.gHi;
+    ellipseFill(ctx, w * 0.5, bandY, w * 0.6, 26);
+    ctx.restore();
+  }
+  // seasonal ground tint
+  if (world.season === "winter") {
+    ctx.fillStyle = "rgba(238, 244, 250, 0.5)";
+    ctx.fillRect(0, 0, w, h);
+  } else if (world.season === "autumn") {
+    ctx.fillStyle = "rgba(200, 120, 40, 0.08)";
+    ctx.fillRect(0, 0, w, h);
+  } else if (world.season === "spring") {
+    ctx.fillStyle = "rgba(255, 190, 210, 0.06)";
+    ctx.fillRect(0, 0, w, h);
   }
 }
 
@@ -169,40 +187,29 @@ function pathSeg(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: numb
   } else {
     ctx.fillStyle = C.soil;
     ctx.fillRect(x - 7, y - 7, w + 14, h + 14);
-    ctx.fillStyle = C.soilLight;
-    for (let i = 0; i < (w * h) / 260; i++) {
-      ctx.fillRect(x - 5 + Math.floor(r() * (w + 10)), y - 5 + Math.floor(r() * (h + 10)), 3, 2);
-    }
-    ctx.fillStyle = C.soilDark;
-    for (let i = 0; i < (w * h) / 500; i++) {
-      ctx.fillRect(x - 5 + Math.floor(r() * (w + 10)), y - 5 + Math.floor(r() * (h + 10)), 2, 2);
-    }
   }
   ctx.fillStyle = C.stone;
   for (let i = 0; i < (w + h) / 60; i++) {
     const edge = r() > 0.5;
     ctx.fillRect(edge ? x - 9 : x + w + 5, y + Math.floor(r() * h), 3, 2);
   }
-  // dithered edges: soil dissolves into grass instead of a hard rectangle
   if (w > h) {
     for (let i = 0; i < w + 12; i += 2) {
       if (r() > 0.45) p(ctx, C.gDark, x - 9 + i, y - 9, 1, 1);
       if (r() > 0.45) p(ctx, C.gDark, x - 9 + i, y + h + 8, 1, 1);
-      if (r() > 0.7) p(ctx, C.soilLight, x - 8 + i, y - 8, 1, 1);
-      if (r() > 0.7) p(ctx, C.soilLight, x - 8 + i, y + h + 8, 1, 1);
     }
   } else {
     for (let i = 0; i < h + 12; i += 2) {
       if (r() > 0.45) p(ctx, C.gDark, x - 9, y - 9 + i, 1, 1);
       if (r() > 0.45) p(ctx, C.gDark, x + w + 8, y - 9 + i, 1, 1);
-      if (r() > 0.7) p(ctx, C.soilLight, x - 8, y - 9 + i, 1, 1);
-      if (r() > 0.7) p(ctx, C.soilLight, x + w + 8, y - 9 + i, 1, 1);
     }
   }
 }
 
 /* ── soil plot ────────────────────────────────────────────── */
-function soilPlot(ctx: CanvasRenderingContext2D, x: number, y: number, r: () => number): void {
+const wateredUntil: number[] = [];
+
+function soilPlot(ctx: CanvasRenderingContext2D, x: number, y: number, idx: number, tick: number, r: () => number): void {
   ctx.fillStyle = C.soil;
   ctx.fillRect(x, y, PLOT_W, PLOT_W);
   ctx.fillStyle = C.soilLight;
@@ -211,6 +218,10 @@ function soilPlot(ctx: CanvasRenderingContext2D, x: number, y: number, r: () => 
   }
   ctx.fillStyle = C.soilDark;
   for (let i = 0; i < 26; i++) ctx.fillRect(x + 2 + Math.floor(r() * 92), y + 2 + Math.floor(r() * 92), 1, 1);
+  if ((wateredUntil[idx] ?? 0) > tick) {
+    ctx.fillStyle = "rgba(30, 16, 6, 0.32)";
+    ctx.fillRect(x + 1, y + 1, PLOT_W - 2, PLOT_W - 2);
+  }
   ctx.fillStyle = C.outline;
   ctx.fillRect(x, y, PLOT_W, 1);
   ctx.fillRect(x, y + PLOT_W - 1, PLOT_W, 1);
@@ -226,7 +237,7 @@ function soilPlot(ctx: CanvasRenderingContext2D, x: number, y: number, r: () => 
   }
 }
 
-/* ── yard fence (procedural, simple rails) ────────────────── */
+/* ── fence / flowers ──────────────────────────────────────── */
 function fenceRun(ctx: CanvasRenderingContext2D, x: number, y: number, w: number): void {
   if (w < 12) return;
   p(ctx, C.woodDark, x, y + 3, w, 3);
@@ -238,14 +249,31 @@ function fenceRun(ctx: CanvasRenderingContext2D, x: number, y: number, w: number
   }
 }
 
-/* ── free-range critters ──────────────────────────────────── */
-type CritterKind = "chicken" | "pig" | "cow" | "farmer";
+function flowerDot(ctx: CanvasRenderingContext2D, x: number, y: number, col: string): void {
+  p(ctx, C.leaf, x + 1, y + 2, 1, 2);
+  p(ctx, col, x, y + 1, 3, 2);
+  p(ctx, col, x + 1, y, 1, 1);
+  p(ctx, col, x + 1, y + 3, 1, 1);
+  p(ctx, C.wheat, x + 1, y + 1, 1, 1);
+}
+
+function pondRect(height: number): Rect {
+  return { x: 500, y: height - 150, w: 200, h: 100 };
+}
+
+/* ── critters ─────────────────────────────────────────────── */
+type CritterKind = "chicken" | "pig" | "cow" | "farmer" | "duck" | "cat" | "horse" | "goat" | "rabbit";
 
 const CRITTER_DEFS: Record<CritterKind, { n: number; speed: number; size: number }> = {
   chicken: { n: 3, speed: 9, size: 18 },
   pig: { n: 1, speed: 5, size: 40 },
   cow: { n: 1, speed: 4, size: 52 },
   farmer: { n: 1, speed: 8, size: 46 },
+  duck: { n: 2, speed: 3, size: 20 },
+  cat: { n: 1, speed: 7, size: 24 },
+  horse: { n: 1, speed: 4, size: 54 },
+  goat: { n: 1, speed: 4, size: 34 },
+  rabbit: { n: 1, speed: 8, size: 16 },
 };
 
 interface Critter {
@@ -260,82 +288,58 @@ interface Critter {
 }
 let critters: Critter[] | null = null;
 
+interface Butterfly { x: number; y: number; tx: number; ty: number; tick: number }
+let butterflies: Butterfly[] | null = null;
+
+let brain: { plotIdx: number; mode: "walk" | "water" | "harvest" | "plant"; actionLeft: number } | null = null;
+let prevLevel = 0;
+const prevNext = new Map<string, string>();
+let rainbowUntil = -999;
+let egg: { x: number; y: number; until: number } | null = null;
+
 function critterCell(c: Critter): PropName {
   if (c.pause > 0) {
     if (c.kind === "chicken") return "chicken-peck";
     if (c.kind === "pig") return "pig-root";
     if (c.kind === "cow") return "cow-graze";
-    return c.tick % 4 < 2 ? "farmer-idle" : "farmer-hoe"; // tends crops while pausing
+    if (c.kind === "duck") return "duck-flap";
+    if (c.kind === "cat") return "cat-sit";
+    if (c.kind === "horse") return "horse-graze";
+    const b = brain!;
+    if (c.kind === "farmer") {
+      if (b.mode === "water") return c.tick % 4 < 2 ? "farmer-water1" : "farmer-water2";
+      if (b.mode === "harvest") return c.tick % 4 < 2 ? "farmer-harvest1" : "farmer-harvest2";
+      if (b.mode === "plant") return c.tick % 4 < 2 ? "farmer-seed1" : "farmer-seed2";
+      return c.tick % 4 < 2 ? "farmer-idle" : "farmer-hoe";
+    }
+    return "goat";
   }
   if (c.kind === "farmer") return c.tick % 4 < 2 ? "farmer-walk1" : "farmer-walk2";
+  if (c.kind === "cat") return "cat-walk";
+  if (c.kind === "duck") return "duck";
+  if (c.kind === "horse") return "horse";
   return c.kind as PropName;
 }
 
-function updateCritters(blocked: Rect[], width: number, height: number, tick: number): void {
-  const r = rng(77 + tick * 13);
-  if (!critters) {
-    const spawnAt: Record<CritterKind, [number, number]> = {
-      // chickens by the field, pig & cow in the open right meadow, farmer on his path
-      chicken: [110, FIELD_TOP - 44],
-      pig: [545, height - 165],
-      cow: [625, height - 150],
-      farmer: [STUB_X + 8, FIELD_TOP + 40],
-    };
-    critters = [];
-    for (const [kind, def] of Object.entries(CRITTER_DEFS) as [CritterKind, { n: number; speed: number; size: number }][]) {
-      for (let i = 0; i < def.n; i++) {
-        const [sx, sy] = spawnAt[kind];
-        critters.push({
-          kind,
-          x: sx + i * 26,
-          y: sy + i * 10,
-          tx: sx,
-          ty: sy,
-          pause: i,
-          tick: i * 2,
-          face: 1,
-        });
-      }
-    }
-  }
-  for (const c of critters) {
-    const speed = CRITTER_DEFS[c.kind].speed;
-    c.x = Math.max(18, Math.min(width - 18, c.x));
-    c.y = Math.max(70, Math.min(height - 20, c.y));
-    if (c.pause > 0) {
-      c.pause--;
-      continue;
-    }
-    const stuck = blocked.some((b) => near(b, c.x, c.y, 2));
-    const dist = Math.hypot(c.tx - c.x, c.ty - c.y);
-    if (dist < 8) {
-      // arrived: pause (peck/root/graze/hoe), then wander somewhere new
-      c.pause = 1 + Math.floor(r() * 3);
-      c.tick++;
-      pickTarget(c, blocked, r, width, height);
-      continue;
-    }
-    if (stuck) {
-      // spawned or wandered into something solid — escape immediately
-      pickTarget(c, blocked, r, width, height);
-    }
-    if (!tryStep(c, c.tx, c.ty, blocked, width, height, speed)) {
-      // fully walled in toward the target: fresh target, never freeze
-      pickTarget(c, blocked, r, width, height);
-    }
+function zoneFor(kind: CritterKind, width: number, height: number, fieldBottom: number, level: number): Rect {
+  switch (kind) {
+    case "duck":
+      return level >= 4 ? pondRect(height) : { x: 442, y: FIELD_TOP + 2, w: 78, h: 48 };
+    case "horse":
+    case "goat":
+      return { x: 470, y: fieldBottom - 80, w: Math.max(60, width - 490), h: Math.max(60, height - fieldBottom - 30) };
+    case "rabbit":
+      return { x: 24, y: 96, w: 270, h: 70 };
+    default:
+      return { x: 20, y: 70, w: width - 40, h: height - 90 };
   }
 }
 
-function pickTarget(
-  c: Critter,
-  blocked: Rect[],
-  r: () => number,
-  width: number,
-  height: number,
-): void {
+function pickTarget(c: Critter, blocked: Rect[], r: () => number, width: number, height: number, fieldBottom: number, level: number): void {
+  const zone = zoneFor(c.kind, width, height, fieldBottom, level);
   for (let attempt = 0; attempt < 6; attempt++) {
-    const tx = 22 + r() * (width - 44);
-    const ty = 74 + r() * (height - 104);
+    const tx = Math.max(22, Math.min(width - 22, zone.x + r() * zone.w));
+    const ty = Math.max(74, Math.min(height - 20, zone.y + r() * zone.h));
     if (!blocked.some((b) => near(b, tx, ty, 2)) || attempt === 5) {
       c.tx = tx;
       c.ty = ty;
@@ -344,17 +348,7 @@ function pickTarget(
   }
 }
 
-/** One step toward (tx,ty); on block, try bearings around it. Never teleports
- *  through obstacles — returns false only if every bearing is walled. */
-function tryStep(
-  c: Critter,
-  tx: number,
-  ty: number,
-  blocked: Rect[],
-  width: number,
-  height: number,
-  speed: number,
-): boolean {
+function tryStep(c: Critter, tx: number, ty: number, blocked: Rect[], width: number, height: number, speed: number): boolean {
   const base = Math.atan2(ty - c.y, tx - c.x);
   for (const off of [0, 0.55, -0.55, 1.1, -1.1, 1.7, -1.7, Math.PI]) {
     const a = base + off;
@@ -371,12 +365,158 @@ function tryStep(
   return false;
 }
 
-/* ── pond (level ≥ 4) ─────────────────────────────────────── */
-function pondRect(height: number): Rect {
-  return { x: 500, y: height - 150, w: 200, h: 100 };
+function updateCritters(
+  blocked: Rect[],
+  width: number,
+  height: number,
+  fieldBottom: number,
+  level: number,
+  world: World,
+  holdings: HoldingRow[],
+  tick: number,
+): void {
+  const r = rng(77 + Math.floor(world.windT * 100));
+  if (!critters) {
+    const spawnAt: Record<CritterKind, [number, number]> = {
+      chicken: [110, FIELD_TOP - 44],
+      pig: [545, height - 165],
+      cow: [625, height - 150],
+      farmer: [STUB_X + 8, FIELD_TOP + 40],
+      duck: [600, height - 100],
+      cat: [220, FIELD_TOP + 60],
+      horse: [560, fieldBottom - 60],
+      goat: [600, fieldBottom - 40],
+      rabbit: [70, FIELD_TOP - 50],
+    };
+    critters = [];
+    for (const [kind, def] of Object.entries(CRITTER_DEFS) as [CritterKind, { n: number; speed: number; size: number }][]) {
+      for (let i = 0; i < def.n; i++) {
+        const [sx, sy] = spawnAt[kind];
+        critters.push({ kind, x: sx + i * 24, y: sy + i * 9, tx: sx, ty: sy, pause: i, tick: i * 2, face: 1 });
+      }
+    }
+  }
+  if (!brain) brain = { plotIdx: 0, mode: "walk", actionLeft: 0 };
+
+  // butterflies over the flower zones; the cat hunts the nearest one
+  if (!butterflies) {
+    butterflies = [
+      { x: 180, y: 120, tx: 180, ty: 120, tick: 0 },
+      { x: 520, y: FIELD_TOP + 20, tx: 520, ty: FIELD_TOP + 20, tick: 0 },
+    ];
+  }
+  for (const b of butterflies) {
+    b.tick++;
+    const dx = b.tx - b.x;
+    const dy = b.ty - b.y;
+    const d = Math.hypot(dx, dy) || 1;
+    if (d < 10) {
+      b.tx = 60 + r() * (width - 120);
+      b.ty = 70 + r() * (fieldBottom - 20);
+      continue;
+    }
+    b.x += (dx / d) * 2.2 + Math.sin(b.tick * 0.8) * 0.7;
+    b.y += (dy / d) * 2.2 + Math.cos(b.tick * 0.7) * 0.6;
+  }
+  const cat = critters.find((c) => c.kind === "cat");
+  if (cat) {
+    const nearest = butterflies.reduce((best, b) =>
+      Math.hypot(b.x - cat.x, b.y - cat.y) < Math.hypot(best.x - cat.x, best.y - cat.y) ? b : best);
+    if (Math.hypot(nearest.x - cat.x, nearest.y - cat.y) < 130) {
+      cat.tx = nearest.x;
+      cat.ty = nearest.y + 8;
+      cat.pause = 0;
+    }
+  }
+
+  for (const c of critters) {
+    const speed = CRITTER_DEFS[c.kind].speed;
+    c.x = Math.max(18, Math.min(width - 18, c.x));
+    c.y = Math.max(70, Math.min(height - 20, c.y));
+    if (c.pause > 0) {
+      c.pause--;
+      if (c.kind === "farmer" && c.pause === 0) {
+        brain!.mode = "walk";
+        brain!.plotIdx = (brain!.plotIdx + 1) % Math.max(1, holdings.length);
+        const rect = plotRects(holdings)[brain!.plotIdx];
+        if (rect) {
+          c.tx = rect.x + PLOT_W / 2;
+          c.ty = rect.y + PLOT_W - 8;
+        }
+      }
+      continue;
+    }
+    // farmer routine: walk to plot → act by that stock's dividend state
+    if (c.kind === "farmer" && brain!.mode === "walk") {
+      const rect = plotRects(holdings)[brain!.plotIdx];
+      if (rect) {
+        c.tx = rect.x + PLOT_W / 2;
+        c.ty = rect.y + PLOT_W - 8;
+      }
+      if (Math.hypot(c.tx - c.x, c.ty - c.y) < 10 && holdings.length) {
+        const h = holdings[brain!.plotIdx];
+        const rect2 = plotRects(holdings)[brain!.plotIdx];
+        if (h?.growth?.ready) {
+          brain!.mode = "harvest";
+          brain!.actionLeft = 3;
+          burst(world, "sparkle", rect2.x + PLOT_W / 2, rect2.y + 24, 14, ["#f2a63b", "#e8c547", "#ffffff"], 1.6);
+          floatText(world, rect2.x + PLOT_W / 2 - 12, rect2.y - 2, `★ ${h.symbol}`);
+        } else if ((h?.growth?.progressPct ?? 100) < 18) {
+          brain!.mode = "plant";
+          brain!.actionLeft = 2;
+          burst(world, "seed", rect2.x + PLOT_W / 2, rect2.y + 40, 8, ["#d9b35c", "#8a5c33"], 1.1);
+        } else {
+          brain!.mode = "water";
+          brain!.actionLeft = 3;
+        }
+        c.pause = brain!.actionLeft;
+        if (brain!.mode === "water") {
+          wateredUntil[brain!.plotIdx] = tick + 8;
+        }
+        continue;
+      }
+    }
+    if (c.kind === "farmer" && brain!.mode === "water" && c.pause > 0) {
+      const rect = plotRects(holdings)[brain!.plotIdx];
+      if (rect && world.particles.length < 200) {
+        burst(world, "drop", rect.x + PLOT_W / 2 + (r() - 0.5) * 44, rect.y + 8, 2, ["#8fd3df"], 0.9);
+      }
+    }
+    const stuck = blocked.some((b) => near(b, c.x, c.y, 2));
+    const dist = Math.hypot(c.tx - c.x, c.ty - c.y);
+    if (dist < 8) {
+      c.pause = 1 + Math.floor(r() * 3);
+      c.tick++;
+      if (c.kind === "chicken" && r() < 0.08 && !egg) {
+        egg = { x: c.x + 6, y: c.y, until: world.windT + 40 };
+      }
+      pickTarget(c, blocked, r, width, height, fieldBottom, level);
+      continue;
+    }
+    if (stuck) pickTarget(c, blocked, r, width, height, fieldBottom, level);
+    if (!tryStep(c, c.tx, c.ty, blocked, width, height, speed)) {
+      pickTarget(c, blocked, r, width, height, fieldBottom, level);
+    }
+  }
 }
 
-function drawPond(ctx: CanvasRenderingContext2D, height: number, tick: number): void {
+/** Public accessors for interactivity. */
+export function critterPositions(): { kind: string; x: number; y: number }[] {
+  return (critters ?? []).map((c) => ({ kind: c.kind, x: c.x, y: c.y }));
+}
+
+export function startleCritter(kind: string, x: number, y: number): void {
+  const target = (critters ?? []).find((c) => c.kind === kind && Math.hypot(c.x - x, c.y - y) < 30);
+  if (target) {
+    target.pause = 0;
+    target.face = target.face === 1 ? -1 : 1;
+    target.tx = 30 + ((target.x * 7) % (SCENE_W - 60));
+    target.ty = 80 + ((target.y * 5) % 200);
+  }
+}
+
+/* ── pond (level ≥ 4) ─────────────────────────────────────── */
+function drawPond(ctx: CanvasRenderingContext2D, height: number, tick: number, world: World): void {
   const cx = 600;
   const cy = height - 100;
   ctx.save();
@@ -395,33 +535,45 @@ function drawPond(ctx: CanvasRenderingContext2D, height: number, tick: number): 
   ctx.fillRect(cx - 40 + off, cy - 8, 14, 1);
   ctx.fillRect(cx + 8 - off, cy + 4, 18, 1);
   ctx.fillRect(cx + 30, cy + 16 - (tick % 2), 10, 1);
+  for (const [dx, dy] of [[-30, 8], [12, -4], [40, 14]] as const) {
+    ctx.fillStyle = C.leaf;
+    ellipseFill(ctx, cx + dx, cy + dy, 5, 3);
+    ctx.fillStyle = C.leafDark;
+    ctx.fillRect(cx + dx + 3, cy + dy - 1, 1, 2);
+  }
   for (const [dx, dy] of [[-84, -8], [-78, 2], [74, 6], [80, -2]] as const) {
     p(ctx, C.leaf, cx + dx, cy + dy, 2, 12);
     p(ctx, C.leafDark, cx + dx, cy + dy, 1, 6);
   }
+  if (tick % 26 === 5) {
+    burst(world, "drop", cx + ((tick % 3) * 20) - 20, cy - 4, 5, ["#8fd3df", "#b8e8f0"], 1.1);
+  }
 }
 
-/* ── scatter flowers ──────────────────────────────────────── */
-function flowerDot(ctx: CanvasRenderingContext2D, x: number, y: number, col: string): void {
-  p(ctx, C.leaf, x + 1, y + 2, 1, 2);
-  p(ctx, col, x, y + 1, 3, 2);
-  p(ctx, col, x + 1, y, 1, 1);
-  p(ctx, col, x + 1, y + 3, 1, 1);
-  p(ctx, C.wheat, x + 1, y + 1, 1, 1);
+/* ── scene ────────────────────────────────────────────────── */
+export interface ScenePayload {
+  holdings: HoldingRow[];
+  level: number;
+  /** current calendar month beats the trailing average → rainbow after rain */
+  monthlyBeat: boolean;
+  settings: Settings;
+  /** progress toward the next farm level (scaffolding near the top) */
+  farmNext?: { progressPct: number };
 }
 
-export interface ScenePayload { holdings: HoldingRow[]; level: number }
-
-/** Monotonic draw counter — animation phases run on this, not on React state,
- *  so critters and effects advance on every redraw no matter what. */
 let sceneTick = 0;
+let worldRef: World | null = null;
 
 export function drawScene(
   ctx: CanvasRenderingContext2D,
-  { holdings, level }: ScenePayload,
+  payload: ScenePayload,
   scale = 1,
-  _frame = 0,
 ): void {
+  const { holdings, level, monthlyBeat, settings } = payload;
+  worldRef = worldRef ?? {
+    hour: 12, season: "summer", weather: "sunny", night: false, windT: 0, wind: 0, particles: [], rainJustEnded: false,
+  };
+  const world = worldRef;
   const tick = sceneTick++;
   const { width, height } = sceneSize(holdings);
   ctx.canvas.width = width * scale;
@@ -430,78 +582,116 @@ export function drawScene(
   ctx.imageSmoothingEnabled = false;
   const r = rng(2024);
 
-  paintGrass(ctx, width, height);
+  paintGrass(ctx, width, height, world, tick);
 
-  // ── house zone (manor sprite at every level) ──
+  // ── house + yard ──
   const tier = (level >= 4 ? 2 : level >= 2 ? 1 : 0) as 0 | 1 | 2;
-  const hw = [178, 190, 200][tier];
+  const hw = HOUSE_W[tier];
   const aspect = assetAspect(HOUSE_KEY);
   const hh = Math.round(hw * aspect);
   const hx = width - hw - 22;
   const hy = 6;
-  const house = drawAsset(ctx, HOUSE_KEY, hx, hy, hw);
   const gateX = hx + Math.round(hw / 2);
   const doorY = hy + hh;
   const fy = doorY + 4;
+  const fieldBottom = FIELD_TOP + Math.ceil(holdings.length / COLS) * ROW_PITCH;
 
+  // stone plaza in front of the door
+  const rr = rng(tick + 5);
+  for (let i = 0; i < 46; i++) {
+    p(ctx, i % 3 === 0 ? C.stone : i % 3 === 1 ? C.stoneLight : C.stoneDark, gateX - 34 + Math.floor(rr() * 68), doorY + 2 + Math.floor(rr() * 16), 2, 2);
+  }
+
+  drawAsset(ctx, HOUSE_KEY, hx, hy, hw);
   fenceRun(ctx, hx - 26, fy, Math.max(12, gateX - hx - 10));
   fenceRun(ctx, gateX + 14, fy, Math.max(12, hx + hw + 26 - gateX - 14));
 
-  drawPropSprite(ctx, "trough", hx - 46, fy + 14, 20);
-  drawPropSprite(ctx, "bush", hx + hw + 12, fy + 14, 30);
+  const mailboxToday = localStorage.getItem(`dd_mailbox_${new Date().toISOString().slice(0, 10)}`) === "1";
+  drawPropSprite(ctx, "well", hx - 58, fy + 18, 44);
+  drawPropSprite(ctx, "trough", hx - 6, fy + 16, 20);
+  drawPropSprite(ctx, "mailbox", hx + hw + 16, fy + 16, 26, mailboxToday);
+  drawPropSprite(ctx, "bed-tulip", hx + 44, fy + 16, 24);
+  drawPropSprite(ctx, "bed-mixed", hx + 108, fy + 16, 24);
+  drawPropSprite(ctx, "crates", hx + 4, fy + 20, 24);
+  drawPropSprite(ctx, "bush", hx + hw + 40, fy + 16, 30);
 
-  // ── path: horizontal above the field (stops clear of the manor), stub
-  // down the col gutter walkway, connector to the yard gate ──
+  // ── path + connector ──
   const PATH_Y = FIELD_TOP - 12;
   pathSeg(ctx, STUB_X, PATH_Y, hx - 14, PATH_Y, r);
   pathSeg(ctx, hx - 14, PATH_Y, hx - 14, fy + 2, r);
-  pathSeg(ctx, STUB_X, PATH_Y, STUB_X, FIELD_TOP + 3 * ROW_PITCH + 4, r);
-
-  // ── tree cluster (generated sprite) ──
-  if (level >= 2) {
-    drawAsset(ctx, "tree-oak", 40, 14, 124);
-    drawAsset(ctx, "tree-oak", 158, 46, 104);
-    drawPropSprite(ctx, "bush", 30, 132, 26);
-  } else {
-    drawAsset(ctx, "tree-oak", 80, 44, 96);
-    drawPropSprite(ctx, "rock", 158, 122, 18);
-  }
-  if (level >= 3) {
-    drawAsset(ctx, "tree-oak", 6, 60, 96);
-    drawPropSprite(ctx, "rock", 288, 132, 22);
+  pathSeg(ctx, STUB_X, PATH_Y, STUB_X, fieldBottom + 4, r);
+  for (const cx of COL_X) {
+    pathSeg(ctx, cx + PLOT_W / 2, FIELD_TOP + PLOT_W + 30, cx + PLOT_W / 2, FIELD_TOP - 10, r);
   }
 
-  // ── pond or lower-right props ──
+  // ── orchard (season-filtered trees) ──
+  const seasonFilter =
+    world.season === "autumn"
+      ? "hue-rotate(-38deg) saturate(1.35) brightness(0.98)"
+      : world.season === "winter"
+        ? "grayscale(0.65) brightness(1.06)"
+        : world.season === "spring"
+          ? "saturate(1.15)"
+          : "none";
+  const sway = Math.round(world.wind * 1.5);
+  try {
+    ctx.filter = seasonFilter;
+  } catch { /* unsupported: draw as-is */ }
+  drawAsset(ctx, "tree-oak", 40, 14 + Math.max(0, sway), 124);
+  drawPropSprite(ctx, "tree-blossom", 158, 150, 128, false);
+  drawAsset(ctx, "tree-oak", 6, 66, 96);
+  drawPropSprite(ctx, "tree-apple", 152, 152, 118, false);
+  drawPropSprite(ctx, "tree-pine", 300, 120, 96, false);
+  drawPropSprite(ctx, "tree-elm", 452, 150, 96, false);
+  try {
+    ctx.filter = "none";
+  } catch { /* ignore */ }
+
+  // ── windmill (spinning) ──
+  const windCells = ["wind0", "wind1", "wind2", "wind3"] as const;
+  drawPropSprite(ctx, windCells[Math.floor(tick / 2) % 4], 660, FIELD_TOP + 96, 130);
+
+  // ── pond / meadow props ──
   if (level >= 4) {
-    drawPond(ctx, height, tick);
+    drawPond(ctx, height, tick, world);
   } else {
-    drawPropSprite(ctx, "haystack", 596, height - 112, 40);
-    drawPropSprite(ctx, "logs", 502, height - 92, 26);
+    drawPropSprite(ctx, "haystack", 600, height - 116, 40);
+    drawPropSprite(ctx, "hay-cart", 500, height - 94, 34);
   }
+  drawPropSprite(ctx, "rock", 288, 132, 22);
 
   // ── field ──
   const maxDiv = Math.max(1, ...holdings.map((h) => h.t12mDividend));
+  let goldenIdx = -1;
+  holdings.forEach((h, i) => {
+    if (h.growth && (goldenIdx === -1 || h.yieldPct > holdings[goldenIdx].yieldPct)) goldenIdx = i;
+  });
   holdings.forEach((h, i) => {
     const px = COL_X[i % COLS];
     const py = FIELD_TOP + Math.floor(i / COLS) * ROW_PITCH;
-    soilPlot(ctx, px, py, r);
-    const ratio = h.t12mDividend / maxDiv;
-    // growth stage comes from this stock's own dividend cycle; holdings with
-    // no dividend history fall back to the income-rank stage (cells 1-4)
-    const stage = h.growth
-      ? h.growth.stage
-      : h.t12mDividend > 0
-        ? 1 + Math.min(3, Math.round(ratio * 3))
-        : 0;
+    soilPlot(ctx, px, py, i, tick, r);
+    const stage = h.growth ? h.growth.stage : h.t12mDividend > 0 ? 1 + Math.min(3, Math.round((h.t12mDividend / maxDiv) * 3)) : 0;
     const ready = h.growth?.ready ?? false;
+    const golden = i === goldenIdx;
     const name = cropName(h.cropIndex);
+    const windLean = stage >= 2 ? Math.round(world.wind * 1.2) : 0;
     for (let ty = 0; ty < 3; ty++) {
       for (let tx = 0; tx < 3; tx++) {
-        drawCropSprite(ctx, name, stage, px + tx * TILE + 2, py + ty * TILE + 30, 36);
+        if (golden) {
+          try {
+            ctx.filter = "saturate(1.6) brightness(1.18)";
+          } catch { /* ignore */ }
+        }
+        drawCropSprite(ctx, name, stage, px + tx * TILE + 2 + (ty % 2 === 0 ? windLean : -windLean), py + ty * TILE + 30, 36);
+        try {
+          ctx.filter = "none";
+        } catch { /* ignore */ }
         if (ready && tick % 2 === 1) {
-          // harvest-ready sparkle pulse while the dividend window is open
           p(ctx, C.white, px + tx * TILE + 14, py + ty * TILE - 2, 2, 2);
           p(ctx, C.wheat, px + tx * TILE + 22, py + ty * TILE + 6, 1, 1);
+        }
+        if (golden && tick % 3 === 0) {
+          p(ctx, "#f2a63b", px + tx * TILE + 8, py + ty * TILE + 8, 1, 1);
         }
       }
     }
@@ -510,11 +700,40 @@ export function drawScene(
 
   drawPropSprite(ctx, "scarecrow", 181, FIELD_TOP + 62, 50);
 
-  // ── scatter: flowers + pebbles avoiding everything built ──
-  const fieldBottom = FIELD_TOP + Math.ceil(holdings.length / COLS) * ROW_PITCH;
+  // harvest countdown board
+  const nextPayout = holdings
+    .map((h) => h.growth?.nextPayout)
+    .filter(Boolean)
+    .sort()[0];
+  if (nextPayout) {
+    const days = Math.max(0, Math.round((Date.parse(`${nextPayout}T12:00:00Z`) - Date.now()) / 86400000));
+    const bx = STUB_X - 46;
+    const by = FIELD_TOP - 2;
+    p(ctx, C.outline, bx - 2, by + 14, 6, 22);
+    p(ctx, C.woodMid, bx - 1, by + 15, 4, 20);
+    p(ctx, C.outline, bx - 4, by - 4, 52, 22);
+    p(ctx, C.woodTan, bx - 3, by - 3, 50, 20);
+    drawText(ctx, "NEXT", bx + 4, by, C.text, 1, C.outline);
+    drawText(ctx, `${days}d`, bx + 12, by + 9, C.wheat, 2, C.outline);
+  }
+
+  // milestone scaffolding
+  if (payload.farmNext && payload.farmNext.progressPct >= 85) {
+    const sx = COL_X[2] + PLOT_W + 26;
+    const sy = fieldBottom + 12;
+    p(ctx, C.woodDark, sx, sy - 40, 4, 40);
+    p(ctx, C.woodDark, sx + 44, sy - 40, 4, 40);
+    p(ctx, C.wood, sx - 4, sy - 34, 56, 3);
+    p(ctx, C.wood, sx - 4, sy - 18, 56, 3);
+    p(ctx, C.woodTan, sx + 8, sy - 34, 3, 34);
+    p(ctx, C.woodTan, sx + 30, sy - 34, 3, 34);
+  }
+
+  // ── scatter ──
   const blocked: Rect[] = [
     { x: hx - 34, y: hy - 14, w: hw + 68, h: hh + 34 },
-    { x: 12, y: 60, w: 300, h: 84 },
+    { x: 12, y: 60, w: 340, h: 100 },
+    { x: 590, y: FIELD_TOP - 10, w: 120, h: 170 },
     ...holdings.map((_, i) => ({
       x: COL_X[i % COLS] - 8,
       y: FIELD_TOP + Math.floor(i / COLS) * ROW_PITCH - 6,
@@ -523,21 +742,19 @@ export function drawScene(
     })),
     { x: gateX - 12, y: hy + hh - 8, w: 26, h: fieldBottom - hy - hh },
     { x: COL_X[2] + PLOT_W + 4, y: FIELD_TOP - 40, w: 34, h: 110 },
-    ...(level >= 4 ? [pondRect(height)] : [{ x: 440, y: height - 220, w: 220, h: 120 }]),
+    ...(level >= 4 ? [pondRect(height)] : [{ x: 430, y: height - 220, w: 230, h: 130 }]),
   ];
   const petals = [C.pink, C.white, C.red, C.orange, C.purple];
   const placed: { x: number; y: number }[] = [];
-  const want = 36 + level * 8;
+  const want = 34 + level * 7;
   for (let n = 0; placed.length < want && n < want * 10; n++) {
     const x = 14 + Math.floor(r() * (width - 28));
     const y = 80 + Math.floor(r() * (height - 100));
     if (blocked.some((b) => near(b, x, y, 6))) continue;
     if (placed.some((q) => Math.abs(q.x - x) < 10 && Math.abs(q.y - y) < 10)) continue;
     placed.push({ x, y });
-    const col = petals[(x * 7 + y) % petals.length];
-    flowerDot(ctx, x, y, col);
+    flowerDot(ctx, x, y, petals[(x * 7 + y) % petals.length]);
     if (r() > 0.5) flowerDot(ctx, x + 7, y + 3, petals[(x + y * 3) % petals.length]);
-    if (r() > 0.8) flowerDot(ctx, x - 5, y + 5, petals[(x * 3 + y * 5) % petals.length]);
     if (r() > 0.72) {
       p(ctx, C.stone, x + 12, y + 4, 2, 2);
       p(ctx, C.stone, x + 15, y + 6, 2, 2);
@@ -545,8 +762,25 @@ export function drawScene(
     }
   }
 
-  // ── free-range critters: chickens, pig, cow, and the farmer ──
-  updateCritters(blocked, width, height, tick);
+  // October pumpkins + winter snowman
+  if (world.season === "autumn" && new Date().getMonth() === 9) {
+    drawCropSprite(ctx, "pumpkin", 4, hx + hw + 8, fy + 26, 22);
+    drawCropSprite(ctx, "pumpkin", 4, hx + hw + 34, fy + 28, 18);
+  }
+  if (world.season === "winter") {
+    const smx = 556;
+    const smy = height - 130;
+    p(ctx, "#eef0e6", smx - 8, smy - 14, 16, 14);
+    p(ctx, "#eef0e6", smx - 6, smy - 26, 12, 13);
+    p(ctx, C.outline, smx - 3, smy - 21, 2, 2);
+    p(ctx, C.outline, smx + 1, smy - 21, 2, 2);
+    p(ctx, "#d9483b", smx - 2, smy - 17, 5, 2);
+    p(ctx, C.woodDark, smx - 12, smy - 12, 5, 2);
+    p(ctx, C.woodDark, smx + 8, smy - 12, 5, 2);
+  }
+
+  // ── critters ──
+  updateCritters(blocked, width, height, fieldBottom, level, world, holdings, tick);
   const drawn = [...critters!].sort((a, b) => a.y - b.y);
   for (const c of drawn) {
     const moving = c.pause <= 0;
@@ -555,24 +789,95 @@ export function drawScene(
     ctx.fillStyle = "#14200a";
     ellipseFill(ctx, c.x, c.y + 1, CRITTER_DEFS[c.kind].size / 3.5, 2);
     ctx.restore();
-    // 1px walk-bob on alternating ticks while moving
     const bob = moving && c.tick % 2 === 0 ? -1 : 0;
     drawPropSprite(ctx, critterCell(c), c.x, c.y + bob, CRITTER_DEFS[c.kind].size, c.face === -1);
   }
+  for (const b of butterflies!) {
+    drawPropSprite(ctx, b.tick % 2 === 0 ? "butterfly-open" : "butterfly-closed", b.x, b.y, 12);
+  }
+  if (egg) {
+    if (world.windT > egg.until) egg = null;
+    else {
+      p(ctx, "#f2eee6", egg.x - 2, egg.y - 4, 4, 5);
+      p(ctx, "#d9d2c2", egg.x - 2, egg.y - 1, 4, 2);
+    }
+  }
 
-  // ── chimney smoke ──
-  if (tier >= 1) {
-    const chimX = hx + Math.round(hw * 0.56);
-    const chimY = hy + Math.round(hh * 0.03);
+  // ── weathervane ──
+  const vaneX = hx + Math.round(hw * 0.56);
+  const vaneY = hy - 2;
+  p(ctx, C.outline, vaneX, vaneY - 10, 1, 12);
+  ctx.save();
+  ctx.translate(vaneX, vaneY - 8);
+  ctx.rotate(Math.sin(tick * 0.05) * 1.2);
+  p(ctx, level >= 5 ? "#f2a63b" : "#8b8b95", -6, -1, 12, 2);
+  p(ctx, level >= 5 ? "#f2a63b" : "#8b8b95", -2, -3, 4, 2);
+  ctx.restore();
+
+  // ── events ──
+  for (const h of holdings) {
+    if (!h.growth) continue;
+    const prev = prevNext.get(h.symbol);
+    if (prev && prev !== h.growth.nextPayout && h.growth.stage <= 1) {
+      firework(world, hx + hw / 2, hy + 8);
+      burst(world, "confetti", hx + hw / 2, hy + hh * 0.6, 18, ["#e8c547", "#d9483b", "#7bb661", "#5fb3c4"], 2);
+      localStorage.setItem(`dd_mailbox_${new Date().toISOString().slice(0, 10)}`, "1");
+    }
+    prevNext.set(h.symbol, h.growth.nextPayout);
+  }
+  if (prevLevel && level > prevLevel) {
+    burst(world, "confetti", width / 2, 140, 30, ["#e8c547", "#d9483b", "#7bb661", "#5fb3c4", "#c8589e"], 2.6);
+  }
+  prevLevel = level;
+
+  if (world.rainJustEnded && monthlyBeat) rainbowUntil = tick + 45;
+  if (tick < rainbowUntil) {
+    const alpha = Math.min(0.4, (rainbowUntil - tick) / 60);
+    const bands = ["#d9483b", "#e8a33c", "#e8c547", "#7bb661", "#5fb3c4", "#8a63d2"];
     ctx.save();
-    ctx.globalAlpha = 0.75;
-    const wrap = (v: number, m: number) => ((v % m) + m) % m;
-    const rise = (tick % 12) * 2;
-    p(ctx, C.smokeDark, chimX - 2 + Math.round(Math.sin(rise)), chimY - 4 - wrap(rise, 18), 3, 3);
-    p(ctx, C.smoke, chimX + 2, chimY - 4 - wrap(rise + 9, 18), 2, 2);
+    ctx.globalAlpha = alpha;
+    ctx.lineWidth = 4;
+    bands.forEach((col) => {
+      ctx.strokeStyle = col;
+      ctx.beginPath();
+      ctx.arc(width * 0.5, height + 40, height * 0.72 - bands.indexOf(col) * 4, Math.PI * 1.05, Math.PI * 1.95);
+      ctx.stroke();
+    });
     ctx.restore();
   }
-}
 
-// re-exported for App-level callers
-export { drawPropSprite as drawProp, type PropName };
+  // ── particles ──
+  spawnAmbient(world, width, height, tick);
+  updateParticles(world, width, height);
+  drawParticles(ctx, world);
+
+  // ── atmosphere ──
+  if (world.night) {
+    ctx.fillStyle = "rgba(18, 26, 54, 0.4)";
+    ctx.fillRect(0, 0, width, height);
+    ctx.fillStyle = "rgba(255, 190, 90, 0.55)";
+    ctx.fillRect(hx + 14, hy + hh * 0.62, 8, 6);
+    ctx.fillRect(hx + hw - 24, hy + hh * 0.62, 8, 6);
+  } else if (world.hour >= 17 || world.hour < 6) {
+    ctx.fillStyle = "rgba(255, 140, 60, 0.13)";
+    ctx.fillRect(0, 0, width, height);
+  } else if (world.hour < 9) {
+    ctx.fillStyle = "rgba(255, 170, 150, 0.08)";
+    ctx.fillRect(0, 0, width, height);
+  }
+  if (world.weather === "rain" && settings.weather) {
+    ctx.fillStyle = "rgba(40, 60, 90, 0.16)";
+    ctx.fillRect(0, 0, width, height);
+  }
+  const clx = ((tick * 2) % (width + 360)) - 180;
+  ctx.save();
+  ctx.globalAlpha = 0.07;
+  ctx.fillStyle = "#14200a";
+  ellipseFill(ctx, clx, 200 + Math.sin(tick * 0.05) * 60, 130, 46);
+  ctx.restore();
+  const vg = ctx.createRadialGradient(width / 2, height / 2, Math.min(width, height) * 0.42, width / 2, height / 2, Math.max(width, height) * 0.72);
+  vg.addColorStop(0, "rgba(0,0,0,0)");
+  vg.addColorStop(1, "rgba(8, 10, 16, 0.3)");
+  ctx.fillStyle = vg;
+  ctx.fillRect(0, 0, width, height);
+}

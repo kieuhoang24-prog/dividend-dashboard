@@ -64,6 +64,24 @@ app.get("/api/health", (c) =>
 app.get("/api/portfolio", async (c) => c.json(await getPayload(false)));
 app.post("/api/refresh", async (c) => c.json(await getPayload(true)));
 
+/** Home Assistant-friendly: per-stock next payout schedule. */
+app.get("/api/next-payouts", async (c) => {
+  const payload = await getPayload(false);
+  return c.json(
+    payload.holdings
+      .filter((h) => h.growth)
+      .map((h) => ({
+        symbol: h.symbol,
+        name: h.name,
+        nextPayout: h.growth!.nextPayout,
+        cycleDays: h.growth!.cycleDays,
+        ready: h.growth!.ready,
+        stage: h.growth!.stage,
+        t12mDividend: h.t12mDividend,
+      })),
+  );
+});
+
 // Static SPA (built client). API routes are registered first and win.
 app.use("/*", serveStatic({ root: "./dist" }));
 app.get("*", serveStatic({ path: "./dist/index.html" }));
