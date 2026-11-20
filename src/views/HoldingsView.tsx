@@ -41,6 +41,7 @@ export function HoldingsView({ data }: { data: PortfolioPayload }) {
             <th onClick={() => toggle("value")}>value{arrow("value")}</th>
             <th onClick={() => toggle("yieldPct")}>yield{arrow("yieldPct")}</th>
             <th onClick={() => toggle("t12mDividend")}>div / yr{arrow("t12mDividend")}</th>
+            <th>next</th>
           </tr>
         </thead>
         <tbody>
@@ -57,6 +58,11 @@ export function HoldingsView({ data }: { data: PortfolioPayload }) {
               <td>{money(data, h.value)}</td>
               <td>{h.yieldPct.toFixed(1)}%</td>
               <td className="gold">{money(data, h.t12mDividend)}</td>
+              <td className={h.growth?.ready ? "gold" : ""}>
+                {h.growth
+                  ? `${Math.max(0, Math.round((Date.parse(`${h.growth.nextPayout}T12:00:00Z`) - Date.now()) / 86400000))}d`
+                  : "—"}
+              </td>
             </tr>
           ))}
           <tr>
@@ -70,6 +76,7 @@ export function HoldingsView({ data }: { data: PortfolioPayload }) {
                 : "—"}
             </td>
             <td className="gold">{money(data, data.totals.annualDividend)}</td>
+            <td></td>
           </tr>
         </tbody>
       </table>

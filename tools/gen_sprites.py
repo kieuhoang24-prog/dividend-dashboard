@@ -26,9 +26,10 @@ STYLE = (
 )
 
 CROP_STAGE_TMPL = (
-    "pixel art sprite sheet: four growth stages of a {crop} in one horizontal row, evenly "
-    "spaced with equal cell sizes: 1 tiny seedling, 2 young sprout, 3 leafy plant, "
-    "4 mature harvest-ready {mature}. "
+    "pixel art sprite sheet: five growth stages of a {crop} in one horizontal row, evenly "
+    "spaced with equal cell sizes: 1 seeds freshly planted in a small soil mound, "
+    "2 tiny sprouting ball with first leaves, 3 bigger leafy young plant, "
+    "4 near-ready tall plant with buds, 5 mature harvest-ready {mature}. "
 )
 
 ASSETS = [
@@ -45,6 +46,9 @@ ASSETS = [
     ("crop-berry", CROP_STAGE_TMPL.format(crop="berry bush", mature="canes with clusters of purple berries") + STYLE),
     ("crop-tulip", CROP_STAGE_TMPL.format(crop="tulip", mature="pink tulip blooms with long green leaves") + STYLE),
     ("props-sheet", "pixel art sprite sheet, exactly 4 columns by 2 rows on flat magenta background: row 1: a scarecrow on a wooden post, a round golden haystack, a pile of cut logs, a wooden water trough; row 2: a white chicken standing, a white chicken pecking at the ground, a small flowering green bush, a grey boulder. " + STYLE),
+    ("animals-sheet", "pixel art sprite sheet, exactly 4 columns by 2 rows on flat magenta background: row 1: a pink farm pig standing, a pink farm pig rooting its snout into the ground, a brown and white dairy cow standing, a brown and white dairy cow grazing with head down; row 2: a Harvest Moon style farmer character with straw hat and blue overalls standing facing forward, the farmer walking with one leg forward, the farmer walking with the other leg forward, the farmer bending to tend crops with a hoe. " + STYLE),
+    ("ground-grass", "seamless tileable Stardew Valley style pixel art grass field ground texture, strict top-down view, dense 16-bit grass detail with subtle tonal variation between three greens, a few tiny lighter blade highlights, no flowers, no props, no path, no objects, even flat lighting, full-frame texture only, edge-to-edge grass"),
+    ("ground-path", "seamless tileable Stardew Valley style pixel art dirt path ground texture, strict top-down view, 16-bit packed brown soil detail with small pebbles and subtle darker patches, no grass border, no objects, even flat lighting, full-frame texture only, edge-to-edge dirt"),
 ]
 
 

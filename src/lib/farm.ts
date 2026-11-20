@@ -12,6 +12,8 @@ import {
   assetAspect,
   drawCropSprite,
   drawPropSprite,
+  drawGroundTiled,
+  hasGround,
   type PropName,
 } from "./assets.js";
 import type { HoldingRow } from "../../shared/types";
@@ -62,8 +64,7 @@ function ellipseFill(ctx: CanvasRenderingContext2D, cx: number, cy: number, rx: 
 }
 
 /* ── grass ────────────────────────────────────────────────── */
-function drawTuft(ctx: CanvasRenderingContext2D, x: number, y: number, variant: number): void {
-  if (variant === 0) {
+function drawTuft(ctx: CanvasRenderingContext2D, x: number, y: number, variant: number): void {  if (variant === 0) {
     p(ctx, C.gDark, x, y + 2, 1, 3);
     p(ctx, C.gLight, x + 2, y + 1, 1, 4);
     p(ctx, C.gDark, x + 4, y + 2, 1, 3);
@@ -96,37 +97,40 @@ function drawTallGrass(ctx: CanvasRenderingContext2D, x: number, y: number): voi
 }
 
 function paintGrass(ctx: CanvasRenderingContext2D, w: number, h: number): void {
-  ctx.fillStyle = C.gBase;
-  ctx.fillRect(0, 0, w, h);
   const r = rng(11);
-  // tonal patchwork: 8px noise cells in three greens
-  for (let cy = 0; cy < h; cy += 8) {
-    for (let cx = 0; cx < w; cx += 8) {
-      const t = r();
-      ctx.fillStyle = t > 0.74 ? C.gLight : t < 0.2 ? C.gDark : C.gBase;
-      ctx.fillRect(cx, cy, 8, 8);
+  const textured = hasGround("ground-grass");
+  if (textured) {
+    // generated SDV-style texture, mirror-tiled so there are no seams
+    drawGroundTiled(ctx, "ground-grass", 0, 0, w, h, 192);
+  } else {
+    ctx.fillStyle = C.gBase;
+    ctx.fillRect(0, 0, w, h);
+    // tonal patchwork: 8px noise cells in three greens
+    for (let cy = 0; cy < h; cy += 8) {
+      for (let cx = 0; cx < w; cx += 8) {
+        const t = r();
+        ctx.fillStyle = t > 0.74 ? C.gLight : t < 0.2 ? C.gDark : C.gBase;
+        ctx.fillRect(cx, cy, 8, 8);
+      }
+    }
+    // large soft meadow/shade patches
+    ctx.save();
+    ctx.globalAlpha = 0.1;
+    for (let i = 0; i < 10; i++) {
+      ctx.fillStyle = r() > 0.5 ? C.gLight : C.gDark;
+      ellipseFill(ctx, Math.floor(r() * w), Math.floor(r() * h), 18 + r() * 34, 10 + r() * 16);
+    }
+    ctx.restore();
+    // pixel dither
+    for (let i = 0; i < (w * h) / 40; i++) {
+      const x = Math.floor(r() * w);
+      const y = Math.floor(r() * h);
+      ctx.fillStyle = r() > 0.5 ? C.gLight : C.gDark;
+      ctx.fillRect(x, y, 2, 1);
     }
   }
-  // large soft meadow/shade patches
-  ctx.save();
-  ctx.globalAlpha = 0.1;
-  for (let i = 0; i < 10; i++) {
-    ctx.fillStyle = r() > 0.5 ? C.gLight : C.gDark;
-    ellipseFill(ctx, Math.floor(r() * w), Math.floor(r() * h), 18 + r() * 34, 10 + r() * 16);
-  }
-  ctx.restore();
-  // pixel dither
-  for (let i = 0; i < (w * h) / 40; i++) {
-    const x = Math.floor(r() * w);
-    const y = Math.floor(r() * h);
-    ctx.fillStyle = r() > 0.5 ? C.gLight : C.gDark;
-    ctx.fillRect(x, y, 2, 1);
-  }
-  // tuft sprites + tall clumps
-  for (let i = 0; i < 100; i++) drawTuft(ctx, Math.floor(r() * (w - 8)), Math.floor(r() * (h - 10)), Math.floor(r() * 3));
-  for (let i = 0; i < 16; i++) drawTallGrass(ctx, Math.floor(r() * (w - 10)), Math.floor(r() * (h - 12)));
   // worn dirt patches, dithered into the grass
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < (textured ? 4 : 6); i++) {
     const cx = Math.floor(r() * w);
     const cy = Math.floor(r() * h);
     ctx.save();
@@ -138,7 +142,9 @@ function paintGrass(ctx: CanvasRenderingContext2D, w: number, h: number): void {
       p(ctx, C.soilDark, cx - 10 + Math.floor(r() * 20), cy - 6 + Math.floor(r() * 12), 1, 1);
     }
   }
-  // tiny daisies
+  // life layer: tufts, tall clumps, daisies (lighter counts over the texture)
+  for (let i = 0; i < (textured ? 60 : 100); i++) drawTuft(ctx, Math.floor(r() * (w - 8)), Math.floor(r() * (h - 10)), Math.floor(r() * 3));
+  for (let i = 0; i < (textured ? 10 : 16); i++) drawTallGrass(ctx, Math.floor(r() * (w - 10)), Math.floor(r() * (h - 12)));
   for (let i = 0; i < 34; i++) {
     const x = Math.floor(r() * (w - 4));
     const y = Math.floor(r() * (h - 4));
@@ -153,15 +159,24 @@ function pathSeg(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: numb
   const y = Math.min(y1, y2);
   const w = Math.abs(x2 - x1) || 14;
   const h = Math.abs(y2 - y1) || 14;
-  ctx.fillStyle = C.soil;
-  ctx.fillRect(x - 7, y - 7, w + 14, h + 14);
-  ctx.fillStyle = C.soilLight;
-  for (let i = 0; i < (w * h) / 260; i++) {
-    ctx.fillRect(x - 5 + Math.floor(r() * (w + 10)), y - 5 + Math.floor(r() * (h + 10)), 3, 2);
-  }
-  ctx.fillStyle = C.soilDark;
-  for (let i = 0; i < (w * h) / 500; i++) {
-    ctx.fillRect(x - 5 + Math.floor(r() * (w + 10)), y - 5 + Math.floor(r() * (h + 10)), 2, 2);
+  if (hasGround("ground-path")) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x - 7, y - 7, w + 14, h + 14);
+    ctx.clip();
+    drawGroundTiled(ctx, "ground-path", x - 7, y - 7, w + 14, h + 14, 128);
+    ctx.restore();
+  } else {
+    ctx.fillStyle = C.soil;
+    ctx.fillRect(x - 7, y - 7, w + 14, h + 14);
+    ctx.fillStyle = C.soilLight;
+    for (let i = 0; i < (w * h) / 260; i++) {
+      ctx.fillRect(x - 5 + Math.floor(r() * (w + 10)), y - 5 + Math.floor(r() * (h + 10)), 3, 2);
+    }
+    ctx.fillStyle = C.soilDark;
+    for (let i = 0; i < (w * h) / 500; i++) {
+      ctx.fillRect(x - 5 + Math.floor(r() * (w + 10)), y - 5 + Math.floor(r() * (h + 10)), 2, 2);
+    }
   }
   ctx.fillStyle = C.stone;
   for (let i = 0; i < (w + h) / 60; i++) {
@@ -223,57 +238,95 @@ function fenceRun(ctx: CanvasRenderingContext2D, x: number, y: number, w: number
   }
 }
 
-/* ── free-range chickens ──────────────────────────────────── */
-interface Chicken {
+/* ── free-range critters ──────────────────────────────────── */
+type CritterKind = "chicken" | "pig" | "cow" | "farmer";
+
+const CRITTER_DEFS: Record<CritterKind, { n: number; speed: number; size: number }> = {
+  chicken: { n: 3, speed: 7, size: 18 },
+  pig: { n: 1, speed: 4, size: 36 },
+  cow: { n: 1, speed: 3, size: 48 },
+  farmer: { n: 1, speed: 6, size: 44 },
+};
+
+interface Critter {
+  kind: CritterKind;
   x: number;
   y: number;
   tx: number;
   ty: number;
-  peck: number;
+  pause: number;
+  tick: number;
+  face: 1 | -1;
 }
-let flock: Chicken[] | null = null;
+let critters: Critter[] | null = null;
 
-function updateFlock(blocked: Rect[], width: number, height: number, frame: number): void {
-  const r = rng(77 + frame * 13);
-  if (!flock) {
-    flock = [0, 1, 2].map((i) => ({
-      x: 60 + i * 46,
-      y: FIELD_TOP - 36 + i * 10,
-      tx: 60 + i * 46,
-      ty: FIELD_TOP - 36 + i * 10,
-      peck: i,
-    }));
+function critterCell(c: Critter): PropName {
+  if (c.pause > 0) {
+    if (c.kind === "chicken") return "chicken-peck";
+    if (c.kind === "pig") return "pig-root";
+    if (c.kind === "cow") return "cow-graze";
+    return c.tick % 4 < 2 ? "farmer-idle" : "farmer-hoe"; // tends crops while pausing
   }
-  for (const c of flock) {
-    // keep inside the map
+  if (c.kind === "farmer") return c.tick % 4 < 2 ? "farmer-walk1" : "farmer-walk2";
+  return c.kind as PropName;
+}
+
+function updateCritters(blocked: Rect[], width: number, height: number, frame: number): void {
+  const r = rng(77 + frame * 13);
+  if (!critters) {
+    const spawnAt: Record<CritterKind, [number, number]> = {
+      // chickens by the field, pig & cow in the open right meadow, farmer on his path
+      chicken: [110, FIELD_TOP - 44],
+      pig: [545, height - 165],
+      cow: [625, height - 150],
+      farmer: [STUB_X + 8, FIELD_TOP + 40],
+    };
+    critters = [];
+    for (const [kind, def] of Object.entries(CRITTER_DEFS) as [CritterKind, { n: number; speed: number; size: number }][]) {
+      for (let i = 0; i < def.n; i++) {
+        const [sx, sy] = spawnAt[kind];
+        critters.push({
+          kind,
+          x: sx + i * 26,
+          y: sy + i * 10,
+          tx: sx,
+          ty: sy,
+          pause: i,
+          tick: i * 2,
+          face: 1,
+        });
+      }
+    }
+  }
+  for (const c of critters) {
+    const speed = CRITTER_DEFS[c.kind].speed;
     c.x = Math.max(18, Math.min(width - 18, c.x));
     c.y = Math.max(70, Math.min(height - 20, c.y));
-    if (c.peck > 0) {
-      c.peck--;
+    if (c.pause > 0) {
+      c.pause--;
       continue;
     }
     const dx = c.tx - c.x;
     const dy = c.ty - c.y;
     const dist = Math.hypot(dx, dy);
     if (dist < 8) {
-      // arrived: peck a while, then choose a new target anywhere on the map
-      if (r() < 0.5) {
-        c.peck = 1 + Math.floor(r() * 2);
-      }
+      // arrived: pause (peck/root/graze/hoe), then wander somewhere new
+      c.pause = 1 + Math.floor(r() * 3);
+      c.tick++;
       c.tx = 22 + r() * (width - 44);
       c.ty = 74 + r() * (height - 104);
       continue;
     }
-    const step = 7;
-    const nx = c.x + (dx / dist) * step;
-    const ny = c.y + (dy / dist) * step;
+    c.face = dx < 0 ? -1 : 1;
+    const nx = c.x + (dx / dist) * speed;
+    const ny = c.y + (dy / dist) * speed;
     if (blocked.some((b) => near(b, nx, ny, 2))) {
-      // obstacle: pick a fresh target
       c.tx = 22 + r() * (width - 44);
       c.ty = 74 + r() * (height - 104);
     } else {
       c.x = nx;
       c.y = ny;
+      c.tick++;
     }
   }
 }
@@ -386,13 +439,20 @@ export function drawScene(
     const py = FIELD_TOP + Math.floor(i / COLS) * ROW_PITCH;
     soilPlot(ctx, px, py, r);
     const ratio = h.t12mDividend / maxDiv;
-    const stage = h.t12mDividend > 0 ? Math.max(1, Math.min(3, Math.round(ratio * 3))) : 0;
+    // growth stage comes from this stock's own dividend cycle; holdings with
+    // no dividend history fall back to the income-rank stage (cells 1-4)
+    const stage = h.growth
+      ? h.growth.stage
+      : h.t12mDividend > 0
+        ? 1 + Math.min(3, Math.round(ratio * 3))
+        : 0;
+    const ready = h.growth?.ready ?? false;
     const name = cropName(h.cropIndex);
     for (let ty = 0; ty < 3; ty++) {
       for (let tx = 0; tx < 3; tx++) {
         drawCropSprite(ctx, name, stage, px + tx * TILE + 2, py + ty * TILE + 30, 36);
-        if (stage === 3 && frame % 4 === 2) {
-          // harvest-ready sparkle pulse
+        if (ready && frame % 2 === 1) {
+          // harvest-ready sparkle pulse while the dividend window is open
           p(ctx, C.white, px + tx * TILE + 14, py + ty * TILE - 2, 2, 2);
           p(ctx, C.wheat, px + tx * TILE + 22, py + ty * TILE + 6, 1, 1);
         }
@@ -438,10 +498,16 @@ export function drawScene(
     }
   }
 
-  // ── free-range chickens (persistent wander, bounce off obstacles) ──
-  updateFlock(blocked, width, height, frame);
-  for (const c of flock!) {
-    drawPropSprite(ctx, c.peck > 0 ? "chicken-peck" : "chicken", c.x, c.y, 18);
+  // ── free-range critters: chickens, pig, cow, and the farmer ──
+  updateCritters(blocked, width, height, frame);
+  const drawn = [...critters!].sort((a, b) => a.y - b.y);
+  for (const c of drawn) {
+    ctx.save();
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = "#14200a";
+    ellipseFill(ctx, c.x, c.y + 1, CRITTER_DEFS[c.kind].size / 3.5, 2);
+    ctx.restore();
+    drawPropSprite(ctx, critterCell(c), c.x, c.y, CRITTER_DEFS[c.kind].size, c.face === -1);
   }
 
   // ── chimney smoke ──

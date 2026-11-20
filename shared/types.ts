@@ -1,5 +1,18 @@
 // Shared payload contract between the Node server and the React client.
 
+export interface HoldingGrowth {
+  /** 0 seeds → 1 ball → 2 bigger → 3 near-ready → 4 ready */
+  stage: number;
+  /** in the payout window → sparkle */
+  ready: boolean;
+  /** predicted next payout date, ISO YYYY-MM-DD */
+  nextPayout: string;
+  /** this stock's cadence in days (median gap of its own dividend history) */
+  cycleDays: number;
+  /** 0..100 through the growth cycle */
+  progressPct: number;
+}
+
 export interface HoldingRow {
   symbol: string;
   name: string;
@@ -12,6 +25,8 @@ export interface HoldingRow {
   yieldPct: number;
   /** 0..7 index into the client's crop palette */
   cropIndex: number;
+  /** Per-stock HM growth cycle driven by this stock's own dividend dates */
+  growth?: HoldingGrowth;
 }
 
 export interface DividendRow {

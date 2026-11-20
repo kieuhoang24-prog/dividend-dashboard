@@ -3,6 +3,7 @@ import {
   cropIndexFor,
   farmStatusFor,
   type DividendRow,
+  type HoldingGrowth,
   type HoldingRow,
   type MonthBucket,
   type PortfolioPayload,
@@ -44,6 +45,47 @@ function isoDay(d: Date): string {
 function withinTrailing(dateStr: string, days: number, now: Date): boolean {
   const t = new Date(`${dateStr}T12:00:00Z`).getTime();
   return now.getTime() - t <= days * 86400000 && t <= now.getTime() + 86400000;
+}
+
+const DAY_MS = 86400000;
+
+function dayDiff(a: string, b: string): number {
+  return Math.round((Date.parse(`${b}T12:00:00Z`) - Date.parse(`${a}T12:00:00Z`)) / DAY_MS);
+}
+
+/**
+ * Per-stock Harvest-Moon growth cycle, driven entirely by this symbol's own
+ * dividend history: seeds right after its last payout, five stages across its
+ * cadence, ready (+sparkle) once the next payout approaches or is due.
+ */
+function growthFor(symbol: string, events: DividendRow[], now: Date): HoldingGrowth | undefined {
+  const dates = events
+    .filter((e) => e.symbol === symbol)
+    .map((e) => e.date)
+    .sort();
+  if (dates.length === 0) return undefined;
+  const lastPayout = dates[dates.length - 1];
+  const gaps: number[] = [];
+  for (let i = Math.max(1, dates.length - 6); i < dates.length; i++) {
+    gaps.push(dayDiff(dates[i - 1], dates[i]));
+  }
+  gaps.sort((a, b) => a - b);
+  const cadence = gaps.length
+    ? Math.max(20, Math.min(400, Math.round(gaps[Math.floor(gaps.length / 2)])))
+    : 30; // single payout → assume monthly
+  const lastMs = Date.parse(`${lastPayout}T12:00:00Z`);
+  const nextMs = lastMs + cadence * DAY_MS;
+  const nowMs = now.getTime();
+  const progress = Math.max(0, Math.min(1.4, (nowMs - lastMs) / (nextMs - lastMs)));
+  const stage = Math.min(4, Math.floor(Math.min(progress, 1) * 5));
+  const ready = progress >= 0.8;
+  return {
+    stage,
+    ready,
+    nextPayout: new Date(Math.max(nowMs, nextMs)).toISOString().slice(0, 10),
+    cycleDays: cadence,
+    progressPct: Math.round(Math.min(progress, 1) * 100),
+  };
 }
 
 /**
@@ -91,6 +133,7 @@ export function buildPayload(opts: {
         t12mDividend: Math.round(t12 * 100) / 100,
         yieldPct: p.value > 0 ? Math.round((t12 / p.value) * 1000) / 10 : 0,
         cropIndex: crop,
+        growth: growthFor(p.symbol, events, now),
       };
     })
     .sort((a, b) => b.t12mDividend - a.t12mDividend || b.value - a.value);
