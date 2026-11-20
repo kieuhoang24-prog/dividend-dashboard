@@ -20,8 +20,17 @@ export function FarmView({ data }: { data: PortfolioPayload }) {
   }, []);
 
   useEffect(() => {
-    const id = setInterval(() => setFrame((f) => (document.hidden ? f : (f + 1) % 4)), 700);
-    return () => clearInterval(id);
+    // keep ticking even in hidden tabs (throttled to ~1s there — cheap) so the
+    // farm never freezes; a visibility change forces an immediate redraw
+    const id = setInterval(() => setFrame((f) => (f + 1) % 4), 700);
+    const onVis = () => {
+      if (!document.hidden) setFrame((f) => f + 1);
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVis);
+    };
   }, []);
 
   useEffect(() => {

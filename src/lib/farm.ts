@@ -271,8 +271,8 @@ function critterCell(c: Critter): PropName {
   return c.kind as PropName;
 }
 
-function updateCritters(blocked: Rect[], width: number, height: number, frame: number): void {
-  const r = rng(77 + frame * 13);
+function updateCritters(blocked: Rect[], width: number, height: number, tick: number): void {
+  const r = rng(77 + tick * 13);
   if (!critters) {
     const spawnAt: Record<CritterKind, [number, number]> = {
       // chickens by the field, pig & cow in the open right meadow, farmer on his path
@@ -306,29 +306,69 @@ function updateCritters(blocked: Rect[], width: number, height: number, frame: n
       c.pause--;
       continue;
     }
-    const dx = c.tx - c.x;
-    const dy = c.ty - c.y;
-    const dist = Math.hypot(dx, dy);
+    const stuck = blocked.some((b) => near(b, c.x, c.y, 2));
+    const dist = Math.hypot(c.tx - c.x, c.ty - c.y);
     if (dist < 8) {
       // arrived: pause (peck/root/graze/hoe), then wander somewhere new
       c.pause = 1 + Math.floor(r() * 3);
       c.tick++;
-      c.tx = 22 + r() * (width - 44);
-      c.ty = 74 + r() * (height - 104);
+      pickTarget(c, blocked, r, width, height);
       continue;
     }
-    c.face = dx < 0 ? -1 : 1;
-    const nx = c.x + (dx / dist) * speed;
-    const ny = c.y + (dy / dist) * speed;
-    if (blocked.some((b) => near(b, nx, ny, 2))) {
-      c.tx = 22 + r() * (width - 44);
-      c.ty = 74 + r() * (height - 104);
-    } else {
-      c.x = nx;
-      c.y = ny;
-      c.tick++;
+    if (stuck) {
+      // spawned or wandered into something solid — escape immediately
+      pickTarget(c, blocked, r, width, height);
+    }
+    if (!tryStep(c, c.tx, c.ty, blocked, width, height, speed)) {
+      // fully walled in toward the target: fresh target, never freeze
+      pickTarget(c, blocked, r, width, height);
     }
   }
+}
+
+function pickTarget(
+  c: Critter,
+  blocked: Rect[],
+  r: () => number,
+  width: number,
+  height: number,
+): void {
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const tx = 22 + r() * (width - 44);
+    const ty = 74 + r() * (height - 104);
+    if (!blocked.some((b) => near(b, tx, ty, 2)) || attempt === 5) {
+      c.tx = tx;
+      c.ty = ty;
+      return;
+    }
+  }
+}
+
+/** One step toward (tx,ty); on block, try bearings around it. Never teleports
+ *  through obstacles — returns false only if every bearing is walled. */
+function tryStep(
+  c: Critter,
+  tx: number,
+  ty: number,
+  blocked: Rect[],
+  width: number,
+  height: number,
+  speed: number,
+): boolean {
+  const base = Math.atan2(ty - c.y, tx - c.x);
+  for (const off of [0, 0.55, -0.55, 1.1, -1.1, 1.7, -1.7, Math.PI]) {
+    const a = base + off;
+    const nx = c.x + Math.cos(a) * speed;
+    const ny = c.y + Math.sin(a) * speed;
+    if (nx < 18 || nx > width - 18 || ny < 70 || ny > height - 20) continue;
+    if (blocked.some((b) => near(b, nx, ny, 2))) continue;
+    c.x = nx;
+    c.y = ny;
+    c.face = Math.cos(a) < 0 ? -1 : 1;
+    c.tick++;
+    return true;
+  }
+  return false;
 }
 
 /* ── pond (level ≥ 4) ─────────────────────────────────────── */
@@ -336,7 +376,7 @@ function pondRect(height: number): Rect {
   return { x: 500, y: height - 150, w: 200, h: 100 };
 }
 
-function drawPond(ctx: CanvasRenderingContext2D, height: number, frame: number): void {
+function drawPond(ctx: CanvasRenderingContext2D, height: number, tick: number): void {
   const cx = 600;
   const cy = height - 100;
   ctx.save();
@@ -351,10 +391,10 @@ function drawPond(ctx: CanvasRenderingContext2D, height: number, frame: number):
   ctx.fillStyle = "#7fc9e0";
   ellipseFill(ctx, cx - 18, cy - 12, 34, 12);
   ctx.fillStyle = C.waterHi;
-  const off = frame * 3;
+  const off = (tick % 12) * 2;
   ctx.fillRect(cx - 40 + off, cy - 8, 14, 1);
   ctx.fillRect(cx + 8 - off, cy + 4, 18, 1);
-  ctx.fillRect(cx + 30, cy + 16 - (frame % 2), 10, 1);
+  ctx.fillRect(cx + 30, cy + 16 - (tick % 2), 10, 1);
   for (const [dx, dy] of [[-84, -8], [-78, 2], [74, 6], [80, -2]] as const) {
     p(ctx, C.leaf, cx + dx, cy + dy, 2, 12);
     p(ctx, C.leafDark, cx + dx, cy + dy, 1, 6);
@@ -372,12 +412,17 @@ function flowerDot(ctx: CanvasRenderingContext2D, x: number, y: number, col: str
 
 export interface ScenePayload { holdings: HoldingRow[]; level: number }
 
+/** Monotonic draw counter — animation phases run on this, not on React state,
+ *  so critters and effects advance on every redraw no matter what. */
+let sceneTick = 0;
+
 export function drawScene(
   ctx: CanvasRenderingContext2D,
   { holdings, level }: ScenePayload,
   scale = 1,
-  frame = 0,
+  _frame = 0,
 ): void {
+  const tick = sceneTick++;
   const { width, height } = sceneSize(holdings);
   ctx.canvas.width = width * scale;
   ctx.canvas.height = height * scale;
@@ -405,9 +450,11 @@ export function drawScene(
   drawPropSprite(ctx, "trough", hx - 46, fy + 14, 20);
   drawPropSprite(ctx, "bush", hx + hw + 12, fy + 14, 30);
 
-  // ── path: horizontal above the field, stub down the col gutter walkway ──
+  // ── path: horizontal above the field (stops clear of the manor), stub
+  // down the col gutter walkway, connector to the yard gate ──
   const PATH_Y = FIELD_TOP - 12;
-  pathSeg(ctx, STUB_X, PATH_Y, gateX, PATH_Y, r);
+  pathSeg(ctx, STUB_X, PATH_Y, hx - 14, PATH_Y, r);
+  pathSeg(ctx, hx - 14, PATH_Y, hx - 14, fy + 2, r);
   pathSeg(ctx, STUB_X, PATH_Y, STUB_X, FIELD_TOP + 3 * ROW_PITCH + 4, r);
 
   // ── tree cluster (generated sprite) ──
@@ -426,7 +473,7 @@ export function drawScene(
 
   // ── pond or lower-right props ──
   if (level >= 4) {
-    drawPond(ctx, height, frame);
+    drawPond(ctx, height, tick);
   } else {
     drawPropSprite(ctx, "haystack", 596, height - 112, 40);
     drawPropSprite(ctx, "logs", 502, height - 92, 26);
@@ -451,7 +498,7 @@ export function drawScene(
     for (let ty = 0; ty < 3; ty++) {
       for (let tx = 0; tx < 3; tx++) {
         drawCropSprite(ctx, name, stage, px + tx * TILE + 2, py + ty * TILE + 30, 36);
-        if (ready && frame % 2 === 1) {
+        if (ready && tick % 2 === 1) {
           // harvest-ready sparkle pulse while the dividend window is open
           p(ctx, C.white, px + tx * TILE + 14, py + ty * TILE - 2, 2, 2);
           p(ctx, C.wheat, px + tx * TILE + 22, py + ty * TILE + 6, 1, 1);
@@ -499,7 +546,7 @@ export function drawScene(
   }
 
   // ── free-range critters: chickens, pig, cow, and the farmer ──
-  updateCritters(blocked, width, height, frame);
+  updateCritters(blocked, width, height, tick);
   const drawn = [...critters!].sort((a, b) => a.y - b.y);
   for (const c of drawn) {
     ctx.save();
@@ -517,7 +564,7 @@ export function drawScene(
     ctx.save();
     ctx.globalAlpha = 0.75;
     const wrap = (v: number, m: number) => ((v % m) + m) % m;
-    const rise = frame * 3;
+    const rise = (tick % 12) * 2;
     p(ctx, C.smokeDark, chimX - 2 + Math.round(Math.sin(rise)), chimY - 4 - wrap(rise, 18), 3, 3);
     p(ctx, C.smoke, chimX + 2, chimY - 4 - wrap(rise + 9, 18), 2, 2);
     ctx.restore();
