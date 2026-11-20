@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { PortfolioPayload } from "../../shared/types";
-import { CROP_COLORS } from "../lib/sprites";
+import { CROP_COLORS } from "../lib/art";
 import { money } from "../lib/format";
 
 type SortKey = "symbol" | "value" | "yieldPct" | "t12mDividend";
