@@ -47,10 +47,17 @@ function hashDate(d: Date): number {
 }
 
 export interface World {
-  hour: number;
+  /** continuous daylight 0 (deep night) .. 1 (noon) */
+  daylight: number;
+  /** how deep into night phase (for fireflies/windows) */
+  nightDepth: number;
+  /** warm orange dusk tint 0..1 */
+  duskWarm: number;
+  /** pink dawn tint 0..1 */
+  dawnPink: number;
+  night: boolean;
   season: Season;
   weather: Weather;
-  night: boolean;
   /** accumulated wind phase; advances every tick */
   windT: number;
   /** current wind strength -1..1 */
@@ -63,18 +70,38 @@ export interface World {
 
 export function worldState(prev: World | null, settings: Settings): World {
   const now = new Date();
-  const hour = now.getHours();
   const month = now.getMonth();
   const season: Season = month <= 1 || month === 11 ? "winter" : month <= 4 ? "spring" : month <= 7 ? "summer" : "autumn";
   const seed = hashDate(now);
   const roll = seed % 100;
   let weather: Weather = roll < (season === "winter" ? 55 : season === "spring" ? 30 : 18) ? "rain" : roll < 55 ? "cloudy" : "sunny";
   if (!settings.weather) weather = "sunny";
-  const night = settings.dayNight && (hour >= 21 || hour < 6);
-  const world: World = prev ?? { hour, season, weather, night, windT: 0, wind: 0, particles: [], rainJustEnded: false };
-  world.hour = hour;
+
+  // continuous day/night curve from the real clock (fractional hours).
+  // sunrise 06:00, sunset 20:00 — light follows a half-sine between them.
+  const h = now.getHours() + now.getMinutes() / 60;
+  let daylight = 0;
+  if (h >= 6 && h <= 20) {
+    daylight = Math.sin(((h - 6) / 14) * Math.PI);
+    daylight = Math.max(0.15, daylight); // never pitch black mid-day
+  }
+  // dusk warm peak ~19:30, dawn pink peak ~06:45 (gaussians, in hours)
+  const duskWarm = Math.exp(-((h - 19.5) ** 2) / 1.6) + Math.exp(-((h - 20.2) ** 2) / 2.4);
+  const dawnPink = Math.exp(-((h - 6.8) ** 2) / 1.4);
+  const nightDepth = settings.dayNight ? Math.max(0, Math.min(1, 1 - daylight * 1.9)) : 0;
+  const night = settings.dayNight && nightDepth > 0.45;
+  if (!settings.dayNight) daylight = 1;
+
+  const world: World = prev ?? {
+    daylight: 1, nightDepth: 0, duskWarm: 0, dawnPink: 0, night: false,
+    season, weather, windT: 0, wind: 0, particles: [], rainJustEnded: false,
+  };
+  world.daylight = settings.dayNight ? daylight : 1;
+  world.nightDepth = nightDepth;
+  world.duskWarm = settings.dayNight ? Math.min(1, duskWarm) : 0;
+  world.dawnPink = settings.dayNight ? Math.min(1, dawnPink) : 0;
+  world.night = night;
   world.season = season;
-  world.night = settings.dayNight ? night : false;
   world.rainJustEnded = world.weather === "rain" && weather !== "rain";
   world.weather = weather;
   world.windT += 0.07;

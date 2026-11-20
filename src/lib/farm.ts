@@ -696,7 +696,7 @@ export function drawScene(
 ): void {
   const { holdings, level, monthlyBeat, settings } = payload;
   worldRef = worldRef ?? {
-    hour: 12, season: "summer", weather: "sunny", night: false, windT: 0, wind: 0, particles: [], rainJustEnded: false,
+    daylight: 1, nightDepth: 0, duskWarm: 0, dawnPink: 0, night: false, season: "summer", weather: "sunny", windT: 0, wind: 0, particles: [], rainJustEnded: false,
   };
   const world = worldRef;
   const tick = sceneTick++;
@@ -752,9 +752,9 @@ export function drawScene(
   // ── orchard (season-filtered trees, spread so nothing stacks) ──
   const seasonFilter =
     world.season === "autumn"
-      ? "hue-rotate(-38deg) saturate(1.35) brightness(0.98)"
+      ? "hue-rotate(-38deg) saturate(1.35) brightness(1.06)"
       : world.season === "winter"
-        ? "grayscale(0.65) brightness(1.06)"
+        ? "grayscale(0.65) brightness(1.1)"
         : world.season === "spring"
           ? "saturate(1.15)"
           : "none";
@@ -1022,18 +1022,25 @@ export function drawScene(
   updateParticles(world, width, height);
   drawParticles(ctx, world);
 
-  // ── atmosphere ──
-  if (world.night) {
-    ctx.fillStyle = "rgba(18, 26, 54, 0.4)";
+  // ── atmosphere: smooth continuous day/night, weather tint, clouds ──
+  // night depth (cool blue, max 0.22 — readable; fireflies + windows carry it)
+  if (world.nightDepth > 0.02) {
+    ctx.fillStyle = `rgba(18, 30, 62, ${(world.nightDepth * 0.22).toFixed(3)})`;
     ctx.fillRect(0, 0, width, height);
-    ctx.fillStyle = "rgba(255, 190, 90, 0.55)";
-    ctx.fillRect(hx + 14, hy + hh * 0.62, 8, 6);
-    ctx.fillRect(hx + hw - 24, hy + hh * 0.62, 8, 6);
-  } else if (world.hour >= 17 || world.hour < 6) {
-    ctx.fillStyle = "rgba(255, 140, 60, 0.13)";
+    if (world.nightDepth > 0.5) {
+      // warm windows glowing through the night
+      ctx.fillStyle = `rgba(255, 190, 90, ${(world.nightDepth * 0.55).toFixed(3)})`;
+      ctx.fillRect(hx + 14, hy + hh * 0.62, 8, 6);
+      ctx.fillRect(hx + hw - 24, hy + hh * 0.62, 8, 6);
+    }
+  }
+  // dusk warm / dawn pink fades
+  if (world.duskWarm > 0.02) {
+    ctx.fillStyle = `rgba(255, 140, 60, ${(world.duskWarm * 0.12).toFixed(3)})`;
     ctx.fillRect(0, 0, width, height);
-  } else if (world.hour < 9) {
-    ctx.fillStyle = "rgba(255, 170, 150, 0.08)";
+  }
+  if (world.dawnPink > 0.02) {
+    ctx.fillStyle = `rgba(255, 170, 150, ${(world.dawnPink * 0.1).toFixed(3)})`;
     ctx.fillRect(0, 0, width, height);
   }
   if (world.weather === "rain" && settings.weather) {

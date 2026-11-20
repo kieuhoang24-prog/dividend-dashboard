@@ -45,7 +45,7 @@ export function FarmView({ data }: { data: PortfolioPayload }) {
 
   useEffect(() => {
     const world = worldRef.current ?? {
-      hour: 12, season: "summer", weather: "sunny", night: false, windT: 0, wind: 0, particles: [], rainJustEnded: false,
+      daylight: 1, nightDepth: 0, duskWarm: 0, dawnPink: 0, night: false, season: "summer", weather: "sunny", windT: 0, wind: 0, particles: [], rainJustEnded: false,
     };
     worldRef.current = worldState(world, settingsRef.current);
     startAmbience(worldRef.current, settingsRef.current.sound);
@@ -185,6 +185,8 @@ export function FarmView({ data }: { data: PortfolioPayload }) {
       </div>
 
       <div className="quick-toggles">
+        <button className={`qt ${settings.dayNight ? "on" : ""}`} onClick={() => toggle("dayNight")}>{settings.dayNight ? "☾ DAY/NIGHT" : "☀ ALWAYS DAY"}</button>
+        <button className={`qt ${settings.weather ? "on" : ""}`} onClick={() => toggle("weather")}>{settings.weather ? "☂ WEATHER" : "☂ NO WEATHER"}</button>
         <button className={`qt ${settings.sound ? "on" : ""}`} onClick={() => toggle("sound")}>{settings.sound ? "♪ SOUND ON" : "♪ SOUND OFF"}</button>
         <button className={`qt ${settings.cinematic ? "on" : ""}`} onClick={() => toggle("cinematic")}>CINEMATIC</button>
       </div>

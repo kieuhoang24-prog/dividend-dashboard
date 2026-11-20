@@ -146,6 +146,8 @@ def main() -> None:
 
     sprites = [Image.open(k).convert("RGBA") for k in keyed_files if not k.name.startswith("ground-")]
     master = collect_palette(sprites, MASTER_PALETTE_COLORS)
+    # gentle global lift: median-cut skews dark, nudge the whole scene brighter
+    master = [(min(255, int(r * 1.06)), min(255, int(g * 1.06)), min(255, int(b * 1.06))) for r, g, b in master]
     print(f"master palette: {len(master)} colors")
 
     for k in keyed_files:
@@ -168,6 +170,9 @@ def main() -> None:
             continue
         img = Image.open(src).convert("RGBA")
         (SMOOTH / gname).write_bytes(src.read_bytes())
+        # the generated tiles skew dark — lift 12% before quantizing
+        from PIL import ImageEnhance
+        img = ImageEnhance.Brightness(img).enhance(1.12)
         gpal = collect_palette([img], pal_n, 6)
         q = quantize(img, gpal)
         q.save(OUT / gname)
