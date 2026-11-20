@@ -119,7 +119,7 @@ function drawTallGrass(ctx: CanvasRenderingContext2D, x: number, y: number): voi
 function paintGrass(ctx: CanvasRenderingContext2D, w: number, h: number, world: World, tick: number): void {
   const r = rng(11);
   const textured = hasGround("ground-grass");
-  if (textured) drawGroundTiled(ctx, "ground-grass", 0, 0, w, h, 192);
+  if (textured) drawGroundTiled(ctx, "ground-grass", 0, 0, w, h, 240);
   else {
     ctx.fillStyle = C.gBase;
     ctx.fillRect(0, 0, w, h);
@@ -141,9 +141,34 @@ function paintGrass(ctx: CanvasRenderingContext2D, w: number, h: number, world: 
     ctx.restore();
     for (let d = 0; d < 12; d++) p(ctx, C.soilDark, cx - 10 + Math.floor(r() * 20), cy - 6 + Math.floor(r() * 12), 1, 1);
   }
-  for (let i = 0; i < 55; i++) drawTuft(ctx, Math.floor(r() * (w - 8)), Math.floor(r() * (h - 10)), Math.floor(r() * 3));
-  for (let i = 0; i < 10; i++) drawTallGrass(ctx, Math.floor(r() * (w - 10)), Math.floor(r() * (h - 12)));
-  for (let i = 0; i < 34; i++) {
+  // dense life layer: tufts, clumps, thousands of blade strokes
+  for (let i = 0; i < 300; i++) {
+    const x = Math.floor(r() * w);
+    const y = Math.floor(r() * h);
+    const tone = r();
+    ctx.fillStyle = tone > 0.66 ? C.gHi : tone > 0.33 ? C.gLight : C.gDark;
+    ctx.fillRect(x, y, 1, 2 + Math.floor(r() * 2));
+  }
+  for (let i = 0; i < 90; i++) drawTuft(ctx, Math.floor(r() * (w - 8)), Math.floor(r() * (h - 10)), Math.floor(r() * 3));
+  for (let i = 0; i < 18; i++) drawTallGrass(ctx, Math.floor(r() * (w - 10)), Math.floor(r() * (h - 12)));
+  // clover patches
+  for (let i = 0; i < 4; i++) {
+    const cx = Math.floor(r() * (w - 12));
+    const cy = Math.floor(r() * (h - 12));
+    for (let l = 0; l < 5; l++) {
+      p(ctx, C.gDark, cx + (l % 3) * 4, cy + Math.floor(l / 3) * 4, 2, 2);
+      p(ctx, C.leafDark, cx + (l % 3) * 4 + 1, cy + Math.floor(l / 3) * 4, 1, 1);
+    }
+  }
+  // mushrooms
+  for (let i = 0; i < 4; i++) {
+    const x = Math.floor(r() * (w - 8));
+    const y = Math.floor(r() * (h - 8));
+    p(ctx, C.woodTan, x + 1, y + 2, 2, 2);
+    p(ctx, "#d9483b", x, y, 4, 2);
+    p(ctx, "#eef0e6", x + 1, y, 1, 1);
+  }
+  for (let i = 0; i < 46; i++) {
     const x = Math.floor(r() * (w - 4));
     const y = Math.floor(r() * (h - 4));
     p(ctx, C.white, x, y, 2, 2);
@@ -182,16 +207,38 @@ function pathSeg(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: numb
     ctx.beginPath();
     ctx.rect(x - 7, y - 7, w + 14, h + 14);
     ctx.clip();
-    drawGroundTiled(ctx, "ground-path", x - 7, y - 7, w + 14, h + 14, 128);
+    drawGroundTiled(ctx, "ground-path", x - 7, y - 7, w + 14, h + 14, 240);
     ctx.restore();
+    // wheel ruts along the path direction
+    if (w > h) {
+      ctx.fillStyle = "rgba(40, 24, 10, 0.35)";
+      ctx.fillRect(x, y - 3, w, 2);
+      ctx.fillRect(x, y + 4, w, 2);
+    } else {
+      ctx.fillStyle = "rgba(40, 24, 10, 0.35)";
+      ctx.fillRect(x - 3, y, 2, h);
+      ctx.fillRect(x + 4, y, 2, h);
+    }
   } else {
     ctx.fillStyle = C.soil;
     ctx.fillRect(x - 7, y - 7, w + 14, h + 14);
   }
   ctx.fillStyle = C.stone;
-  for (let i = 0; i < (w + h) / 60; i++) {
+  for (let i = 0; i < (w + h) / 40; i++) {
     const edge = r() > 0.5;
     ctx.fillRect(edge ? x - 9 : x + w + 5, y + Math.floor(r() * h), 3, 2);
+  }
+  // grass encroaching on the path edges
+  if (w > h) {
+    for (let i = 0; i < w; i += 3) {
+      if (r() > 0.4) p(ctx, C.gDark, x - 8 + i, y - 7, 1, 2);
+      if (r() > 0.4) p(ctx, C.gDark, x - 8 + i, y + h + 6, 1, 2);
+    }
+  } else {
+    for (let i = 0; i < h; i += 3) {
+      if (r() > 0.4) p(ctx, C.gDark, x - 7, y - 8 + i, 2, 1);
+      if (r() > 0.4) p(ctx, C.gDark, x + w + 6, y - 8 + i, 2, 1);
+    }
   }
   if (w > h) {
     for (let i = 0; i < w + 12; i += 2) {
@@ -255,6 +302,15 @@ function flowerDot(ctx: CanvasRenderingContext2D, x: number, y: number, col: str
   p(ctx, col, x + 1, y, 1, 1);
   p(ctx, col, x + 1, y + 3, 1, 1);
   p(ctx, C.wheat, x + 1, y + 1, 1, 1);
+}
+
+/** Soft ground shadow under a tree canopy. */
+function treeShadow(ctx: CanvasRenderingContext2D, cx: number, cy: number, rx: number): void {
+  ctx.save();
+  ctx.globalAlpha = 0.14;
+  ctx.fillStyle = "#14200a";
+  ellipseFill(ctx, cx, cy, rx, 6);
+  ctx.restore();
 }
 
 function pondRect(height: number): Rect {
@@ -706,10 +762,14 @@ export function drawScene(
   try {
     ctx.filter = seasonFilter;
   } catch { /* unsupported: draw as-is */ }
-  drawAsset(ctx, "tree-oak", 24, 10, 116);
-  drawPropSprite(ctx, "tree-blossom", 172, 150, 122, false);
-  drawPropSprite(ctx, "tree-pine", 262, 104, 88, false);
-  drawPropSprite(ctx, "tree-apple", 356, 144, 108, false);
+  const oak = drawAsset(ctx, "tree-oak", 24, 10, 116);
+  treeShadow(ctx, 24 + oak.w / 2, 10 + oak.h, oak.w / 2.4);
+  const blossom = drawPropSprite(ctx, "tree-blossom", 172, 150, 122, false);
+  treeShadow(ctx, 172, 150, blossom.w / 2.4);
+  const apple = drawPropSprite(ctx, "tree-apple", 356, 144, 108, false);
+  treeShadow(ctx, 356, 144, apple.w / 2.4);
+  const pine = drawPropSprite(ctx, "tree-pine", 262, 104, 88, false);
+  treeShadow(ctx, 262, 104, pine.w / 2.6);
   try {
     ctx.filter = "none";
   } catch { /* ignore */ }
@@ -722,7 +782,8 @@ export function drawScene(
   try {
     ctx.filter = seasonFilter;
   } catch { /* ignore */ }
-  drawPropSprite(ctx, "tree-elm", 498, fieldBottom - 116, 88, false);
+  const elm = drawPropSprite(ctx, "tree-elm", 498, fieldBottom - 116, 88, false);
+  treeShadow(ctx, 498, fieldBottom - 116, elm.w / 2.4);
   try {
     ctx.filter = "none";
   } catch { /* ignore */ }

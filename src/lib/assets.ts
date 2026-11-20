@@ -371,17 +371,18 @@ export function drawPropSprite(
   baseY: number,
   h: number,
   flip = false,
-): void {
+): { w: number; h: number } {
   const loc = PROP_CELLS[prop];
-  if (!loc) return;
+  if (!loc) return { w: 0, h: 0 };
   const [key, col, row] = loc;
   const a = assetOf(key);
   const cell = cellOf(key, col, row);
-  if (!a || !cell || cell.w <= 0) return;
+  if (!a || !cell || cell.w <= 0) return { w: 0, h: 0 };
   const w = (cell.w / cell.h) * h;
   ctx.save();
   ctx.translate(x, baseY);
   if (flip) ctx.scale(-1, 1);
   ctx.drawImage(a.img, cell.x, cell.y, cell.w, cell.h, -w / 2, -h, w, h);
   ctx.restore();
+  return { w, h };
 }

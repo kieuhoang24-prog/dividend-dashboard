@@ -100,10 +100,76 @@ def key_image(img: Image.Image) -> Image.Image:
     return out
 
 
+# ── pixel-density normalization ────────────────────────────
+# Every asset is resized so that drawing it at its on-screen size is a clean
+# 2:1 halving (pixel-art-correct) instead of a 5-10x nearest-neighbor
+# decimation. Ground tiles normalize to exactly 240 (1:1 with the tiler).
+TARGETS: dict[str, tuple[str, int]] = {
+    "house-cabin.png": ("bbox_w", 400),
+    "house-barn.png": ("bbox_w", 400),
+    "house-manor.png": ("bbox_w", 400),
+    "tree-oak.png": ("bbox_w", 240),
+    "ground-grass.png": ("fixed", 240),
+    "ground-path.png": ("fixed", 240),
+    "crop-": ("cell_median_h", 72),      # cells drawn at 36px tall
+    "props-sheet.png": ("cell_median_h", 56),   # cells drawn 18-50px
+    "actions-sheet.png": ("cell_median_h", 92), # farmer cells drawn ~46px
+    "props2-sheet.png": ("cell_median_h", 92),  # well/coop ~44 + windmill 140
+    "trees2-sheet.png": ("cell_median_h", 176), # trees ~88-122px
+    "animals-sheet.png": ("cell_median_h", 92), # cow/farmer ~46-52px
+    "animals2-sheet.png": ("cell_median_h", 58), # duck 20 … horse 54
+}
+
+
+def target_for(name: str):
+    for k, v in TARGETS.items():
+        if name.startswith(k) or name == k:
+            return v
+    return ("max_side", 640)
+
+
+def grid_cells(img: Image.Image, cols: int, rows: int):
+    """Alpha bbox per grid cell (for measuring content heights)."""
+    w, h = img.size
+    cw, chh = w / cols, h / rows
+    out = []
+    for r in range(rows):
+        for c in range(cols):
+            region = img.crop((round(c * cw), round(r * chh), round((c + 1) * cw), round((r + 1) * chh)))
+            bbox = region.getchannel("A").point(lambda v: 255 if v > 24 else 0).getbbox()
+            if bbox:
+                out.append((bbox[2] - bbox[0], bbox[3] - bbox[1]))
+    return out
+
+
+def normalize(keyed: Image.Image, name: str) -> Image.Image:
+    mode, value = target_for(name)
+    if mode == "fixed":
+        return keyed.resize((value, value), Image.LANCZOS)
+    if mode == "bbox_w":
+        bbox = keyed.getchannel("A").point(lambda v: 255 if v > 24 else 0).getbbox()
+        if not bbox:
+            return keyed
+        content_w = bbox[2] - bbox[0]
+        scale = value / content_w
+    else:  # cell_median_h
+        grid = (5, 1) if name.startswith("crop-") else (4, 2)
+        cells = grid_cells(keyed, grid[0], grid[1])
+        if not cells:
+            return keyed
+        heights = sorted(ch for _, ch in cells)
+        median_h = heights[len(heights) // 2]
+        scale = value / median_h
+    if abs(scale - 1.0) < 0.05:
+        return keyed
+    return keyed.resize((round(keyed.width * scale), round(keyed.height * scale)), Image.LANCZOS)
+
+
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     for f in sorted(RAW.glob("*.png")):
         keyed = key_image(Image.open(f))
+        keyed = normalize(keyed, f.name)
         dest = OUT / f.name
         keyed.save(dest)
         opaque = sum(1 for a in keyed.getchannel("A").getdata() if a > 0)
