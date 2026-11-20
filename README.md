@@ -54,11 +54,12 @@ Home Assistant (display)**.
 
 | | |
 |---|---|
-| **Farm** — each holding is a crop plot on its own dividend cycle: seeds after a payout, five growth stages, ripe with a sparkle when the next dividend is due. The farmer waters (soil stays dark all day), harvests ready crops, plants fresh seeds. Chickens, a pig, a cow, a horse, a goat, a cat, ducks and butterflies live here; animals path home and sleep at night. | ![Holdings](docs/screenshots/holdings.png) |
-| **Holdings** — the harvest log: value, yield, trailing-12-month dividends and a per-stock days-to-payout countdown. | ![Schedule](docs/screenshots/schedule.png) |
-| **Schedule** — the harvest calendar: the last 12 months of real payout history from your Ghostfolio activities, per stock, per month. | ![Stages](docs/screenshots/stages.png) |
-| **Stages** — the farm levels up as your annual dividend income crosses milestones: Seedling plot → Sprout garden → Growing farm → Thriving estate → Golden harvest. | ![Settings](docs/screenshots/settings.png) |
-| **Settings** — connection health, refresh interval, and the ready-to-paste Home Assistant card. | |
+| **Farm** — each holding is a crop plot on its own dividend cycle: seeds after a payout, five growth stages, ripe with a sparkle when the next dividend is due. The farmer waters (soil stays dark all day), harvests ready crops, plants fresh seeds. Chickens, a pig, a cow, a horse, a goat, a cat, ducks and butterflies live here; animals path home and sleep at night. | ![Farm](docs/screenshots/farm.png) |
+| **Holdings** — the harvest log: value, yield, trailing-12-month dividends and a per-stock days-to-payout countdown. | ![Holdings](docs/screenshots/holdings.png) |
+| **Schedule** — the harvest calendar: the last 12 months of real payout history from your Ghostfolio activities, per stock, per month. | ![Schedule](docs/screenshots/schedule.png) |
+| **Stages** — the farm levels up as your annual dividend income crosses milestones: Seedling plot → Sprout garden → Growing farm → Thriving estate → Golden harvest. | ![Stages](docs/screenshots/stages.png) |
+| **Settings** — connection health, refresh interval, and the ready-to-paste Home Assistant card. | ![Settings](docs/screenshots/settings.png) |
+| **After dark** — the continuous day/night cycle: dimmed ambient, a warm lantern pool, glowing windows and the lit coop while the animals sleep. | ![Night](docs/screenshots/farm-night.png) |
 
 Plus: a continuous **day/night cycle** from your real clock (dawn pink, noon,
 orange dusk, blue night with fireflies and glowing windows), **seasons**
@@ -103,7 +104,8 @@ icon: mdi:flower
 url: http://YOUR_HOST:8090/?kiosk=1
 ```
 
-Kiosk mode (`?kiosk=1`) hides all chrome for wall panels. The scene follows
+Kiosk mode (`?kiosk=1`) hides all chrome for wall panels, and `?view=holdings|schedule|stages|settings`
+deep-links straight to one tab (e.g. `?view=holdings&kiosk=1` for a holdings-only panel). The scene follows
 your real clock, so a tablet on the wall shows the farm's whole day.
 `?hour=9` / `?hour=22` pin any time of day for testing.
 

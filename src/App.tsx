@@ -17,10 +17,16 @@ const TABS = [
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
+const VIEW_IDS: readonly string[] = TABS.map((t) => t.id);
 
 export function App() {
-  const kiosk = useMemo(() => new URLSearchParams(window.location.search).has("kiosk"), []);
-  const [tab, setTab] = useState<TabId>("farm");
+  const params = useMemo(() => new URLSearchParams(window.location.search), []);
+  const kiosk = params.has("kiosk");
+  // ?view=holdings|schedule|stages|settings deep-links a tab (handy for HA panels)
+  const [tab, setTab] = useState<TabId>(() => {
+    const v = params.get("view");
+    return VIEW_IDS.includes(v ?? "") ? (v as TabId) : "farm";
+  });
   const [data, setData] = useState<PortfolioPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
