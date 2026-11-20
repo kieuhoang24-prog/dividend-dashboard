@@ -2,6 +2,8 @@
 
 # 🌾 Dividend Dashboard
 
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20the%20farm-ff5e5b?logo=kofi&logoColor=white)](https://ko-fi.com/kh36453)
+
 **A pixel-art farm that grows your dividend portfolio — live in Home Assistant.**
 
 Every stock you own is a crop plot. Seeds go in the ground after each payout,
@@ -146,6 +148,12 @@ React + Vite + TypeScript · Hono (Node) · canvas rendering · Docker Compose
 (dashboard + ghostfolio + postgres + redis). Portfolio data is fetched
 server-side and cached; nothing is stored by this app, and nothing leaves
 your network except Ghostfolio's own market-data calls.
+
+## Support
+
+If the farm brightens your wall panel, a coffee keeps the pixel farmers going:
+
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20the%20farm-ff5e5b?logo=kofi&logoColor=white)](https://ko-fi.com/kh36453)
 
 ## License
 
