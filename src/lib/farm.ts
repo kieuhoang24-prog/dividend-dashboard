@@ -14,7 +14,6 @@ import {
 } from "./assets.js";
 import type { HoldingRow } from "../../shared/types";
 import {
-  type Season,
   type Settings,
   type World,
   spawnAmbient,
@@ -427,7 +426,7 @@ function critterCell(c: Critter): PropName {
   return c.kind as PropName;
 }
 
-function zoneFor(kind: CritterKind, width: number, height: number, level: number): Rect | null {
+function zoneFor(kind: CritterKind, _width: number, height: number, level: number): Rect | null {
   // full-map roam for everyone; only ducks bias to water when it exists
   if (kind === "duck" && level >= 4) return pondRect(height);
   return null;
@@ -805,15 +804,6 @@ export function critterPositions(): { kind: string; x: number; y: number }[] {
   return (critters ?? []).map((c) => ({ kind: c.kind, x: c.x, y: c.y }));
 }
 
-export function startleCritter(kind: string, x: number, y: number): void {
-  const target = (critters ?? []).find((c) => c.kind === kind && Math.hypot(c.x - x, c.y - y) < 30);
-  if (target) {
-    target.pause = 0;
-    target.face = target.face === 1 ? -1 : 1;
-    target.tx = 30 + ((target.x * 7) % (SCENE_W - 60));
-    target.ty = 80 + ((target.y * 5) % 200);
-  }
-}
 
 /** Pet an animal: ♥ burst, mood up, occasional ♪. */
 export function petCritter(kind: string, x: number, y: number): void {
@@ -898,6 +888,8 @@ function drawPond(ctx: CanvasRenderingContext2D, height: number, tick: number, w
 export interface ScenePayload {
   holdings: HoldingRow[];
   level: number;
+  /** display currency symbol (from base currency) */
+  currencySymbol: string;
   /** current calendar month beats the trailing average → rainbow after rain */
   monthlyBeat: boolean;
   settings: Settings;
@@ -908,6 +900,7 @@ export interface ScenePayload {
 }
 
 let sceneTick = 0;
+let lastHoldingsSig = "";
 
 export function drawScene(
   ctx: CanvasRenderingContext2D,
@@ -916,6 +909,15 @@ export function drawScene(
 ): void {
   const { holdings, level, monthlyBeat, settings, world } = payload;
   const tick = sceneTick++;
+  // portfolio changed (stocks added/removed)? reset per-holding state so
+  // watering indexes, event history and the farmer's tour never go stale
+  const sig = holdings.map((h) => h.symbol).join(",");
+  if (sig !== lastHoldingsSig) {
+    lastHoldingsSig = sig;
+    wateredUntil.length = 0;
+    prevNext.clear();
+    brain = null;
+  }
   const { width, height } = sceneSize(holdings);
   ctx.canvas.width = width * scale;
   ctx.canvas.height = height * scale;
@@ -976,7 +978,6 @@ export function drawScene(
         : world.season === "spring"
           ? "saturate(1.15)"
           : "none";
-  const sway = Math.round(world.wind * 1.5);
   try {
     ctx.filter = seasonFilter;
   } catch { /* unsupported: draw as-is */ }
@@ -1050,7 +1051,7 @@ export function drawScene(
         }
       }
     }
-    drawSign(ctx, h.symbol, `£${Math.round(h.t12mDividend)}/yr`, px + PLOT_W / 2, py + PLOT_W + 6);
+    drawSign(ctx, h.symbol, `${payload.currencySymbol}${Math.round(h.t12mDividend)}/yr`, px + PLOT_W / 2, py + PLOT_W + 6);
   });
 
   drawPropSprite(ctx, "scarecrow", 318, FIELD_TOP + 64, 50);

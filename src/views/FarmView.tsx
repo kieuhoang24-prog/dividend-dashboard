@@ -5,12 +5,6 @@ import { loadAssets } from "../lib/assets";
 import { money } from "../lib/format";
 import { worldState, startAmbience, stopAmbience, type World, type Settings, type Season, type Weather, type Particle, loadSettings, saveSettings } from "../lib/world";
 
-interface Props {
-  data: PortfolioPayload;
-  onRefresh: () => void;
-  refreshing: boolean;
-}
-
 export function FarmView({ data }: { data: PortfolioPayload }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const worldRef = useRef<World | null>(null);
@@ -69,6 +63,7 @@ export function FarmView({ data }: { data: PortfolioPayload }) {
       {
         holdings: data.holdings,
         level: data.farm.level,
+        currencySymbol: data.currencySymbol,
         monthlyBeat: last.total > avgMonthly,
         settings: settingsRef.current,
         world: worldRef.current!,

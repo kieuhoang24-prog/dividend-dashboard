@@ -58,7 +58,7 @@ function dayDiff(a: string, b: string): number {
  * dividend history: seeds right after its last payout, five stages across its
  * cadence, ready (+sparkle) once the next payout approaches or is due.
  */
-function growthFor(symbol: string, events: DividendRow[], now: Date): HoldingGrowth | undefined {
+export function growthFor(symbol: string, events: DividendRow[], now: Date): HoldingGrowth | undefined {
   const dates = events
     .filter((e) => e.symbol === symbol)
     .map((e) => e.date)

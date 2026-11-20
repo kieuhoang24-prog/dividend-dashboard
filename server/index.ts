@@ -10,52 +10,78 @@ const GHOSTFOLIO_URL = (process.env.GHOSTFOLIO_URL ?? "http://localhost:3333").r
 const GHOSTFOLIO_TOKEN = process.env.GHOSTFOLIO_TOKEN?.trim() ?? "";
 const BASE_CURRENCY = process.env.BASE_CURRENCY?.trim() || "GBP";
 const REFRESH_SECONDS = Math.max(30, Number(process.env.REFRESH_SECONDS ?? 300) || 300);
+const API_KEY = process.env.DASHBOARD_API_KEY?.trim() ?? "";
+const API_KEY_NOTE = API_KEY ? "api-key required" : "open (LAN)";
 
 let cache: { payload: PortfolioPayload; fetchedAt: number } | null = null;
 let lastError: string | null = null;
+let inflight: Promise<PortfolioPayload> | null = null;
 
-async function getPayload(force: boolean): Promise<PortfolioPayload> {
+// single in-flight upstream fetch: concurrent requests share one refresh
+function computePayload(force: boolean): Promise<PortfolioPayload> {
   const ageMs = cache ? Date.now() - cache.fetchedAt : Infinity;
-  const stale = force || !cache || ageMs > REFRESH_SECONDS * 1000;
-
-  if (stale) {
-    if (!GHOSTFOLIO_TOKEN) {
-      cache = { payload: demoPayload(REFRESH_SECONDS, BASE_CURRENCY), fetchedAt: Date.now() };
-      lastError = null;
-    } else {
+  if (!force && cache && ageMs <= REFRESH_SECONDS * 1000) {
+    return Promise.resolve(cache.payload);
+  }
+  if (!inflight) {
+    inflight = (async () => {
+      if (!GHOSTFOLIO_TOKEN) {
+        return demoPayload(REFRESH_SECONDS, BASE_CURRENCY);
+      }
       try {
         const payload = await fetchUpstream(GHOSTFOLIO_URL, GHOSTFOLIO_TOKEN, BASE_CURRENCY);
         payload.meta.refreshSeconds = REFRESH_SECONDS;
-        cache = { payload, fetchedAt: Date.now() };
         lastError = null;
+        return payload;
       } catch (err: any) {
         lastError = String(err?.message ?? err);
         console.warn(`[ghostfolio] fetch failed: ${lastError}`);
-        if (!cache) {
-          cache = {
-            payload: demoPayload(REFRESH_SECONDS, BASE_CURRENCY, `Ghostfolio not reachable: ${lastError}`),
-            fetchedAt: Date.now(),
-          };
+        if (cache) {
+          // serve the previous good cache, flagged
+          return { ...cache.payload, meta: { ...cache.payload.meta, warning: lastError } };
         }
-        // otherwise keep serving the stale cache
+        return demoPayload(REFRESH_SECONDS, BASE_CURRENCY, `Ghostfolio not reachable: ${lastError}`);
+      } finally {
+        inflight = null;
       }
-    }
+    })();
   }
+  return inflight.then((payload) => {
+    cache = { payload, fetchedAt: Date.now() };
+    return payload;
+  });
+}
 
-  const payload = cache!.payload;
-  return lastError && payload.mode === "live" ? { ...payload, meta: { ...payload.meta, warning: lastError } } : payload;
+async function getPayload(force: boolean): Promise<PortfolioPayload> {
+  const payload = await computePayload(force);
+  return lastError && payload.mode === "live"
+    ? { ...payload, meta: { ...payload.meta, warning: lastError } }
+    : payload;
 }
 
 const app = new Hono();
 
+// optional LAN gate: set DASHBOARD_API_KEY to require it on /api endpoints
+// (health stays open). Off by default for trusted home networks.
+if (API_KEY) {
+  app.use("/api/*", async (c, next) => {
+    if (c.req.path === "/api/health") return next();
+    if (c.req.header("X-API-Key") === API_KEY) return next();
+    return c.json({ error: "unauthorized" }, 401);
+  });
+}
+
 app.get("/api/health", (c) =>
   c.json({
     status: "ok",
+    version: "0.1.0",
+    uptimeS: Math.round(process.uptime()),
     mode: GHOSTFOLIO_TOKEN ? "live" : "demo",
     baseCurrency: BASE_CURRENCY,
     ghostfolioUrl: GHOSTFOLIO_URL,
     tokenConfigured: Boolean(GHOSTFOLIO_TOKEN),
     refreshSeconds: REFRESH_SECONDS,
+    apiGate: API_KEY_NOTE,
     cacheAgeMs: cache ? Date.now() - cache.fetchedAt : null,
     lastError,
   }),
