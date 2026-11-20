@@ -77,8 +77,11 @@ function growthFor(symbol: string, events: DividendRow[], now: Date): HoldingGro
   const nextMs = lastMs + cadence * DAY_MS;
   const nowMs = now.getTime();
   const progress = Math.max(0, Math.min(1.4, (nowMs - lastMs) / (nextMs - lastMs)));
-  const stage = Math.min(4, Math.floor(Math.min(progress, 1) * 5));
-  const ready = progress >= 0.8;
+  // Harvest Moon pacing: spend real time tiny — seeds/sprouts early, ripe
+  // only once the payout window opens
+  const stage =
+    progress < 0.15 ? 0 : progress < 0.38 ? 1 : progress < 0.62 ? 2 : progress < 0.85 ? 3 : 4;
+  const ready = progress >= 0.85;
   return {
     stage,
     ready,

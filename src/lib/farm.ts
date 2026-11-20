@@ -388,6 +388,8 @@ function updateCritters(
     };
     critters = [];
     for (const [kind, def] of Object.entries(CRITTER_DEFS) as [CritterKind, { n: number; speed: number; size: number }][]) {
+      // ducks only exist where there is water to swim (the pond, level 4+)
+      if (kind === "duck" && level < 4) continue;
       for (let i = 0; i < def.n; i++) {
         const [sx, sy] = spawnAt[kind];
         critters.push({ kind, x: sx + i * 24, y: sy + i * 9, tx: sx, ty: sy, pause: i, tick: i * 2, face: 1 });

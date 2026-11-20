@@ -20,15 +20,15 @@ interface DemoSeed {
 }
 
 const SEEDS: DemoSeed[] = [
-  { symbol: "MAIN", name: "Main Street Capital", quantity: 130, unitPrice: 46.2, value: 6006, payMonths: [0,1,2,3,4,5,6,7,8,9,10,11], payDay: 5, perPayout: 10 },
-  { symbol: "O", name: "Realty Income", quantity: 120, unitPrice: 45.8, value: 5496, payMonths: [0,1,2,3,4,5,6,7,8,9,10,11], payDay: 1, perPayout: 12 },
+  { symbol: "MAIN", name: "Main Street Capital", quantity: 130, unitPrice: 46.2, value: 6006, payMonths: [0,1,2,3,4,5,6,7,8,9,10,11], payDay: 17, perPayout: 10 },
+  { symbol: "O", name: "Realty Income", quantity: 120, unitPrice: 45.8, value: 5496, payMonths: [0,1,2,3,4,5,6,7,8,9,10,11], payDay: 20, perPayout: 12 },
   { symbol: "SCHD", name: "Schwab U.S. Dividend Equity ETF", quantity: 150, unitPrice: 29.0, value: 4350, payMonths: [0,3,6,9], payDay: 25, perPayout: 37 },
   { symbol: "ENB", name: "Enbridge Inc.", quantity: 300, unitPrice: 26.0, value: 7800, payMonths: [2,5,8,11], payDay: 2, perPayout: 59 },
-  { symbol: "EPD", name: "Enterprise Products Partners", quantity: 250, unitPrice: 24.9, value: 6225, payMonths: [1,4,7,10], payDay: 14, perPayout: 39 },
-  { symbol: "VZ", name: "Verizon Communications", quantity: 160, unitPrice: 20.0, value: 3200, payMonths: [2,5,8,11], payDay: 10, perPayout: 24 },
-  { symbol: "XOM", name: "Exxon Mobil Corporation", quantity: 100, unitPrice: 45.0, value: 4500, payMonths: [1,4,7,10], payDay: 11, perPayout: 27.5 },
-  { symbol: "JNJ", name: "Johnson & Johnson", quantity: 100, unitPrice: 30.0, value: 3000, payMonths: [2,5,8,11], payDay: 8, perPayout: 21 },
-  { symbol: "KO", name: "Coca-Cola Company", quantity: 160, unitPrice: 15.0, value: 2400, payMonths: [1,4,7,10], payDay: 4, perPayout: 18 },
+  { symbol: "EPD", name: "Enterprise Products Partners", quantity: 250, unitPrice: 24.9, value: 6225, payMonths: [1,4,7,10], payDay: 8, perPayout: 39 },
+  { symbol: "VZ", name: "Verizon Communications", quantity: 160, unitPrice: 20.0, value: 3200, payMonths: [2,5,8,11], payDay: 18, perPayout: 24 },
+  { symbol: "XOM", name: "Exxon Mobil Corporation", quantity: 100, unitPrice: 45.0, value: 4500, payMonths: [1,4,7,10], payDay: 3, perPayout: 27.5 },
+  { symbol: "JNJ", name: "Johnson & Johnson", quantity: 100, unitPrice: 30.0, value: 3000, payMonths: [2,5,8,11], payDay: 12, perPayout: 21 },
+  { symbol: "KO", name: "Coca-Cola Company", quantity: 160, unitPrice: 15.0, value: 2400, payMonths: [1,4,7,10], payDay: 16, perPayout: 18 },
   { symbol: "PG", name: "Procter & Gamble", quantity: 65, unitPrice: 31.0, value: 2015, payMonths: [0,3,6,9], payDay: 20, perPayout: 14 },
 ];
 
