@@ -40,6 +40,9 @@ services:
       REDIS_PORT: "6379"
       REDIS_PASSWORD: ${REDIS_PASSWORD:-change-me-redis}
       REDIS_DB: "0"
+      # quote cache: 1 hour (default 1 minute) — keeps provider calls well
+      # inside the free daily limit for an always-on wall panel
+      CACHE_QUOTES_TTL: ${CACHE_QUOTES_TTL:-3600}
       HOST: 0.0.0.0
       PORT: "3333"
     depends_on:

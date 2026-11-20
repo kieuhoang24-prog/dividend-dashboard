@@ -114,6 +114,7 @@ your real clock, so a tablet on the wall shows the farm's whole day.
 | `BASE_CURRENCY` | `GBP` | Display currency |
 | `REFRESH_SECONDS` | `300` | Data refresh cadence |
 | `PORT` | `8090` | Dashboard port |
+| `CACHE_QUOTES_TTL` | `3600` | Ghostfolio quote-cache seconds (upstream default 60). 3600 keeps provider calls ~24 batched requests/day — inside the free data source's daily limit. |
 
 ## Maintenance
 
