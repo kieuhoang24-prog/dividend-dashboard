@@ -986,8 +986,6 @@ export function drawScene(
   } catch { /* unsupported: draw as-is */ }
   const oak = drawAsset(ctx, "tree-oak", 24, 10, 116);
   treeShadow(ctx, 24 + oak.w / 2, 10 + oak.h, oak.w / 2.4);
-  const blossom = drawPropSprite(ctx, "tree-blossom", 172, 150, 122, false);
-  treeShadow(ctx, 172, 150, blossom.w / 2.4);
   const apple = drawPropSprite(ctx, "tree-apple", 356, 144, 108, false);
   treeShadow(ctx, 356, 144, apple.w / 2.4);
   const pine = drawPropSprite(ctx, "tree-pine", 262, 104, 88, false);
@@ -1000,7 +998,7 @@ export function drawScene(
   const windCells = ["wind0", "wind1", "wind2", "wind3"] as const;
   drawPropSprite(ctx, windCells[Math.floor(tick / 2) % 4], 655, FIELD_TOP + ROW_PITCH + PLOT_W, 140);
 
-  // ── pond / meadow props (elm lives here too) ──
+  // ── pond / meadow props (elm + the pink blossom tree live here) ──
   try {
     ctx.filter = seasonFilter;
   } catch { /* ignore */ }
@@ -1009,6 +1007,10 @@ export function drawScene(
   try {
     ctx.filter = "none";
   } catch { /* ignore */ }
+  // the pink blossom tree: below the windmill, along the 3rd crop row
+  // (drawn unfiltered so it stays pink through every season)
+  const blossom = drawPropSprite(ctx, "tree-blossom", 620, FIELD_TOP + 2 * ROW_PITCH + 116, 118, false);
+  treeShadow(ctx, 620, FIELD_TOP + 2 * ROW_PITCH + 116, blossom.w / 2.4);
   if (level >= 4) {
     drawPond(ctx, height, tick, world);
   } else {
@@ -1092,7 +1094,8 @@ export function drawScene(
   const blocked: Rect[] = [
     { x: hx - 34, y: hy - 14, w: hw + 68, h: hh + 34 },
     { x: 12, y: 60, w: 340, h: 100 },
-    { x: 590, y: FIELD_TOP - 10, w: 120, h: 170 },
+    { x: 600, y: FIELD_TOP + ROW_PITCH + 2, w: 112, h: 164 },
+    { x: 556, y: FIELD_TOP + 2 * ROW_PITCH + 16, w: 130, h: 156 },
     ...holdings.map((_, i) => ({
       x: COL_X[i % COLS] - 8,
       y: FIELD_TOP + Math.floor(i / COLS) * ROW_PITCH - 6,
