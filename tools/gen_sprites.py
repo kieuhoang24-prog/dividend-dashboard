@@ -56,6 +56,17 @@ ASSETS = [
 ]
 
 
+QWEN_TEMPLATE: dict = {
+    "1": {"class_type": "UNETLoader", "inputs": {"unet_name": "qwen_image_2.1_int8_convrot.safetensors", "weight_dtype": "default"}},
+    "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": "qwen3vl_8b_int8_convrot.safetensors", "type": "qwen_image", "device": "default"}},
+    "3": {"class_type": "TextEncodeQwenImage21", "inputs": {"clip": ["2", 0], "prompt": "", "negative_prompt": "", "resolution": 1024}},
+    "4": {"class_type": "KSampler", "inputs": {"seed": 42, "steps": 24, "cfg": 3.5, "sampler_name": "euler", "scheduler": "simple", "denoise": 1.0, "model": ["1", 0], "positive": ["3", 0], "negative": ["3", 1], "latent_image": ["3", 2]}},
+    "5": {"class_type": "VAEDecode", "inputs": {"samples": ["4", 0], "vae": ["6", 0]}},
+    "6": {"class_type": "VAELoader", "inputs": {"vae_name": "qwen_image_2.1_vae_bf16.safetensors"}},
+    "7": {"class_type": "SaveImage", "inputs": {"filename_prefix": "dd_qwen", "images": ["5", 0]}},
+}
+
+
 def guard() -> bool:
     r = subprocess.run(["bash", GUARD, "--warn"], capture_output=True, text=True)
     ok = r.returncode == 0
@@ -80,8 +91,11 @@ def outputs_for(prompt_id: str) -> list[str]:
 
 def main() -> None:
     SPRITES.mkdir(parents=True, exist_ok=True)
-    only = sys.argv[1:] or None
-    tmpl = json.loads(WORKFLOW.read_text())
+    args = sys.argv[1:]
+    engine_qwen = "--qwen" in args
+    args = [a for a in args if a != "--qwen"]
+    only = args or None
+    tmpl = QWEN_TEMPLATE if engine_qwen else json.loads(WORKFLOW.read_text())
     results = {}
     for name, prompt in ASSETS:
         if only and name not in only:
@@ -89,12 +103,17 @@ def main() -> None:
         if not guard():
             sys.exit(1)
         wf = json.loads(json.dumps(tmpl))
-        wf["4"]["inputs"]["text"] = prompt
-        wf["8"]["inputs"]["seed"] = random.randint(1, 2**31 - 1)
-        wf["10"]["inputs"]["filename_prefix"] = f"dd_{name}"
+        if engine_qwen:
+            wf["3"]["inputs"]["prompt"] = prompt
+            wf["4"]["inputs"]["seed"] = random.randint(1, 2**31 - 1)
+            wf["7"]["inputs"]["filename_prefix"] = f"dd_{name}"
+        else:
+            wf["4"]["inputs"]["text"] = prompt
+            wf["8"]["inputs"]["seed"] = random.randint(1, 2**31 - 1)
+            wf["10"]["inputs"]["filename_prefix"] = f"dd_{name}"
         tmp = SPRITES / f".wf_{name}.json"
         tmp.write_text(json.dumps(wf))
-        print(f"[gen] {name}: submitting", flush=True)
+        print(f"[gen:{ 'qwen' if engine_qwen else 'zimage' }] {name}: submitting", flush=True)
         run = subprocess.run(
             [COMFY, "--json", "run", "--workflow", str(tmp), "--host", HOST, "--port", str(PORT), "--wait"],
             capture_output=True, text=True, timeout=900,

@@ -9,6 +9,17 @@ but wired to your own **Ghostfolio** instance, fully local, and designed to sit 
 Home Assistant dashboard.
 
 
+
+## True pixel-art pipeline
+
+Every asset goes through a conversion pipeline (`tools/pixelate.py`) after
+generation: true low-res pixel grid (the exact on-screen pixel density),
+quantization to a shared 40-color master palette, and an auto outline pass in
+each fill's darker shade — the technique real 16-bit art uses. Ground tiles
+are quantized to their own palettes, tiled 1:1, and the grass scatters 4 tile
+variants so nothing repeats. Weakest assets get re-rolled on the quality
+flagship model (`qwen_image_2.1`) instead of the fast one. Smooth
+pre-pixel versions are kept in `tools/smooth/` for instant rollback.
 ## Living world (current)
 
 The farm is a real-time scene driven by your Ghostfolio data:

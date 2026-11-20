@@ -11,6 +11,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 RAW = Path(__file__).resolve().parent / "raw"
+KEYED = Path(__file__).resolve().parent / "keyed"
 OUT = Path(__file__).resolve().parent.parent / "public" / "sprites"
 MARKER = (0, 255, 0, 255)
 THRESH = 115
@@ -167,11 +168,12 @@ def normalize(keyed: Image.Image, name: str) -> Image.Image:
 
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
+    KEYED.mkdir(parents=True, exist_ok=True)
     for f in sorted(RAW.glob("*.png")):
         keyed = key_image(Image.open(f))
         keyed = normalize(keyed, f.name)
-        dest = OUT / f.name
-        keyed.save(dest)
+        keyed.save(OUT / f.name)
+        keyed.save(KEYED / f.name)  # pristine copy: pixelate always works from this
         opaque = sum(1 for a in keyed.getchannel("A").getdata() if a > 0)
         print(f"{f.name}: {keyed.size} opaque={opaque * 100 // (keyed.size[0] * keyed.size[1])}%")
 

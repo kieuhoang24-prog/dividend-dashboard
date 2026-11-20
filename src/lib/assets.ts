@@ -23,6 +23,9 @@ export const ASSET_MANIFEST: Record<string, string> = {
   "trees2-sheet": "/sprites/trees2-sheet.png",
   "animals2-sheet": "/sprites/animals2-sheet.png",
   "ground-grass": "/sprites/ground-grass.png",
+  "ground-grass-v0": "/sprites/ground-grass-v0.png",
+  "ground-grass-v1": "/sprites/ground-grass-v1.png",
+  "ground-grass-v2": "/sprites/ground-grass-v2.png",
   "ground-path": "/sprites/ground-path.png",
 };
 
@@ -245,9 +248,14 @@ export function assetAspect(key: string): number {
   return cell.h / cell.w;
 }
 
+const GROUND_VARIANTS: Record<string, string[]> = {
+  "ground-grass": ["ground-grass", "ground-grass-v0", "ground-grass-v1", "ground-grass-v2"],
+};
+
 /**
- * Mirror-tiled fill: alternate quadrants flip so there can be no seams.
- * Full tiles use flipped blits; edge leftovers use cropped source rects.
+ * Mirror-tiled fill with per-cell variant picking: when variants exist
+ * (grass), each quadrant pulls a different tile at 1:1 pixel density —
+ * no seams, no visible repetition. Others draw their single texture 1:1.
  */
 export function drawGroundTiled(
   ctx: CanvasRenderingContext2D,
@@ -256,8 +264,22 @@ export function drawGroundTiled(
   y: number,
   w: number,
   h: number,
-  tile = 192,
+  tile = 240,
 ): void {
+  const variants = GROUND_VARIANTS[key];
+  if (variants) {
+    const quad = tile / 2;
+    for (let cy = y; cy < y + h; cy += quad) {
+      for (let cx = x; cx < x + w; cx += quad) {
+        const gi = Math.abs(Math.floor(cx / quad) * 7 + Math.floor(cy / quad) * 13) % variants.length;
+        const a = assetOf(variants[gi]);
+        const cell = cellOf(variants[gi], 0, 0);
+        if (!a || !cell || cell.w <= 0) continue;
+        ctx.drawImage(a.img, cell.x, cell.y, cell.w, cell.h, cx, cy, quad, quad);
+      }
+    }
+    return;
+  }
   const a = assetOf(key);
   if (!a) return;
   const iw = a.img.width;
