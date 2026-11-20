@@ -242,10 +242,10 @@ function fenceRun(ctx: CanvasRenderingContext2D, x: number, y: number, w: number
 type CritterKind = "chicken" | "pig" | "cow" | "farmer";
 
 const CRITTER_DEFS: Record<CritterKind, { n: number; speed: number; size: number }> = {
-  chicken: { n: 3, speed: 7, size: 18 },
-  pig: { n: 1, speed: 4, size: 36 },
-  cow: { n: 1, speed: 3, size: 48 },
-  farmer: { n: 1, speed: 6, size: 44 },
+  chicken: { n: 3, speed: 9, size: 18 },
+  pig: { n: 1, speed: 5, size: 40 },
+  cow: { n: 1, speed: 4, size: 52 },
+  farmer: { n: 1, speed: 8, size: 46 },
 };
 
 interface Critter {
@@ -549,12 +549,15 @@ export function drawScene(
   updateCritters(blocked, width, height, tick);
   const drawn = [...critters!].sort((a, b) => a.y - b.y);
   for (const c of drawn) {
+    const moving = c.pause <= 0;
     ctx.save();
     ctx.globalAlpha = 0.18;
     ctx.fillStyle = "#14200a";
     ellipseFill(ctx, c.x, c.y + 1, CRITTER_DEFS[c.kind].size / 3.5, 2);
     ctx.restore();
-    drawPropSprite(ctx, critterCell(c), c.x, c.y, CRITTER_DEFS[c.kind].size, c.face === -1);
+    // 1px walk-bob on alternating ticks while moving
+    const bob = moving && c.tick % 2 === 0 ? -1 : 0;
+    drawPropSprite(ctx, critterCell(c), c.x, c.y + bob, CRITTER_DEFS[c.kind].size, c.face === -1);
   }
 
   // ── chimney smoke ──

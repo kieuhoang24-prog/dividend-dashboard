@@ -60,7 +60,9 @@ function gridFor(key: string): { cols: number; rows: number } | null {
   return null;
 }
 
-/** Alpha bounding box per grid cell, measured on a ≤256px offscreen copy. */
+/** Alpha bounding boxes per grid cell. Sprites are detected as connected
+ *  components and assigned to the cell containing their centroid, so a wide
+ *  animal that straddles a cell boundary is never clipped by the slice. */
 function computeCells(img: HTMLImageElement, grid: { cols: number; rows: number } | null): Record<string, Cell> {
   const scale = Math.min(1, 256 / Math.max(img.width, img.height));
   const w = Math.max(1, Math.round(img.width * scale));
@@ -77,39 +79,75 @@ function computeCells(img: HTMLImageElement, grid: { cols: number; rows: number 
   } catch {
     return {};
   }
-  const alphaAt = (x: number, y: number) => data[(y * w + x) * 4 + 3];
+  const opaque = (x: number, y: number) => data[(y * w + x) * 4 + 3] > 24;
   const cols = grid?.cols ?? 1;
   const rows = grid?.rows ?? 1;
+
+  // connected-component labeling (4-connectivity) over opaque pixels
+  const labels = new Int32Array(w * h);
+  const comps: { minX: number; minY: number; maxX: number; maxY: number; size: number; cx: number; cy: number }[] = [];
+  const stack: number[] = [];
+  let next = 1;
+  for (let y0 = 0; y0 < h; y0++) {
+    for (let x0 = 0; x0 < w; x0++) {
+      const start = y0 * w + x0;
+      if (labels[start] !== 0 || !opaque(x0, y0)) continue;
+      labels[start] = next;
+      stack.push(start);
+      let minX = x0, maxX = x0, minY = y0, maxY = y0, size = 0, sx = 0, sy = 0;
+      while (stack.length) {
+        const p = stack.pop()!;
+        const px = p % w;
+        const py = (p / w) | 0;
+        size++;
+        sx += px;
+        sy += py;
+        if (px < minX) minX = px;
+        if (px > maxX) maxX = px;
+        if (py < minY) minY = py;
+        if (py > maxY) maxY = py;
+        if (px + 1 < w && labels[p + 1] === 0 && opaque(px + 1, py)) { labels[p + 1] = next; stack.push(p + 1); }
+        if (px > 0 && labels[p - 1] === 0 && opaque(px - 1, py)) { labels[p - 1] = next; stack.push(p - 1); }
+        if (py + 1 < h && labels[p + w] === 0 && opaque(px, py + 1)) { labels[p + w] = next; stack.push(p + w); }
+        if (py > 0 && labels[p - w] === 0 && opaque(px, py - 1)) { labels[p - w] = next; stack.push(p - w); }
+      }
+      comps.push({ minX, minY, maxX, maxY, size, cx: sx / size, cy: sy / size });
+      next++;
+    }
+  }
+
+  // assign components to grid cells by centroid; a cell's bbox is the union
+  // of its components (may legally spill across cell borders)
+  const acc = new Map<string, { minX: number; minY: number; maxX: number; maxY: number }>();
+  for (const comp of comps) {
+    if (comp.size < 12) continue; // ignore specks
+    const col = Math.min(cols - 1, Math.max(0, Math.floor((comp.cx / w) * cols)));
+    const row = Math.min(rows - 1, Math.max(0, Math.floor((comp.cy / h) * rows)));
+    const key = `${col},${row}`;
+    const a = acc.get(key);
+    if (!a) acc.set(key, { minX: comp.minX, minY: comp.minY, maxX: comp.maxX, maxY: comp.maxY });
+    else {
+      a.minX = Math.min(a.minX, comp.minX);
+      a.minY = Math.min(a.minY, comp.minY);
+      a.maxX = Math.max(a.maxX, comp.maxX);
+      a.maxY = Math.max(a.maxY, comp.maxY);
+    }
+  }
+
+  const inv = 1 / scale;
   const cells: Record<string, Cell> = {};
   const cw = w / cols;
   const chh = h / rows;
-  const inv = 1 / scale;
   for (let r = 0; r < rows; r++) {
     for (let col = 0; col < cols; col++) {
-      const x0 = Math.round(col * cw);
-      const y0 = Math.round(r * chh);
-      const x1 = Math.round((col + 1) * cw);
-      const y1 = Math.round((r + 1) * chh);
-      let minX = x1, minY = y1, maxX = x0 - 1, maxY = y0 - 1;
-      for (let y = y0; y < y1; y++) {
-        for (let x = x0; x < x1; x++) {
-          if (alphaAt(x, y) > 24) {
-            if (x < minX) minX = x;
-            if (x > maxX) maxX = x;
-            if (y < minY) minY = y;
-            if (y > maxY) maxY = y;
-          }
-        }
+      const key = `${col},${r}`;
+      const a = acc.get(key);
+      if (a) {
+        cells[key] = { x: a.minX * inv, y: a.minY * inv, w: (a.maxX - a.minX + 1) * inv, h: (a.maxY - a.minY + 1) * inv };
+      } else {
+        // empty cell fallback: the grid slot itself
+        cells[key] = { x: col * cw * inv, y: r * chh * inv, w: cw * inv, h: chh * inv };
       }
-      if (maxX < minX || maxY < minY) {
-        minX = x0; minY = y0; maxX = x1 - 1; maxY = y1 - 1;
-      }
-      cells[`${col},${r}`] = {
-        x: minX * inv,
-        y: minY * inv,
-        w: (maxX - minX + 1) * inv,
-        h: (maxY - minY + 1) * inv,
-      };
     }
   }
   return cells;
