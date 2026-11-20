@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { PortfolioPayload } from "../../shared/types";
-import { chimneyPos, drawScene, drawSmoke } from "../lib/farm";
+import { drawScene } from "../lib/farm";
 import { money } from "../lib/format";
 
 export function FarmView({ data }: { data: PortfolioPayload }) {
@@ -8,16 +8,14 @@ export function FarmView({ data }: { data: PortfolioPayload }) {
   const [frame, setFrame] = useState(0);
 
   useEffect(() => {
-    const id = setInterval(() => setFrame((f) => (document.hidden ? f : 1 - f)), 900);
+    const id = setInterval(() => setFrame((f) => (document.hidden ? f : (f + 1) % 4)), 700);
     return () => clearInterval(id);
   }, []);
 
   useEffect(() => {
     const ctx = canvasRef.current?.getContext("2d");
     if (!ctx) return;
-    drawScene(ctx, { holdings: data.holdings, level: data.farm.level }, 2, frame);
-    const chim = chimneyPos(data.farm.level, data.holdings);
-    if (chim) drawSmoke(ctx, chim.x, chim.y, frame);
+    drawScene(ctx, { holdings: data.holdings, level: data.farm.level }, 1, frame);
   }, [data, frame]);
 
   const nextPct = data.farm.next ? data.farm.progressPct : 100;
