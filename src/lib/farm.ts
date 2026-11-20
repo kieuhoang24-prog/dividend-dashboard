@@ -901,24 +901,20 @@ export interface ScenePayload {
   /** current calendar month beats the trailing average → rainbow after rain */
   monthlyBeat: boolean;
   settings: Settings;
+  /** live world state (clock, weather, particles) — advanced by the caller */
+  world: World;
   /** progress toward the next farm level (scaffolding near the top) */
   farmNext?: { progressPct: number };
 }
 
 let sceneTick = 0;
-let worldRef: World | null = null;
 
 export function drawScene(
   ctx: CanvasRenderingContext2D,
   payload: ScenePayload,
   scale = 1,
 ): void {
-  const { holdings, level, monthlyBeat, settings } = payload;
-  const world = worldRef ?? {
-    daylight: 1, nightDepth: 0, duskWarm: 0, dawnPink: 0, night: false, hour: 12,
-    season: "summer" as const, weather: "sunny" as const, windT: 0, wind: 0, particles: [], rainJustEnded: false,
-  };
-  worldRef = world;
+  const { holdings, level, monthlyBeat, settings, world } = payload;
   const tick = sceneTick++;
   const { width, height } = sceneSize(holdings);
   ctx.canvas.width = width * scale;

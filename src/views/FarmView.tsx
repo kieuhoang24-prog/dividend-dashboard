@@ -60,6 +60,8 @@ export function FarmView({ data }: { data: PortfolioPayload }) {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
+    // advance the world one tick per redraw (clock, weather, particles)
+    worldRef.current = worldState(worldRef.current, settingsRef.current);
     const last = data.calendar[data.calendar.length - 1];
     const avgMonthly = data.totals.annualDividend / 12;
     drawScene(
@@ -69,6 +71,7 @@ export function FarmView({ data }: { data: PortfolioPayload }) {
         level: data.farm.level,
         monthlyBeat: last.total > avgMonthly,
         settings: settingsRef.current,
+        world: worldRef.current!,
         farmNext: data.farm.next ? { progressPct: data.farm.progressPct } : undefined,
       },
       1,

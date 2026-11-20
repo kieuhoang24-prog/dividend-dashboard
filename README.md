@@ -1,171 +1,151 @@
-# Dividend Dashboard 🌾
+<div align="center">
 
-A self-hosted, **pixel-art dividend farm** for your portfolio. Instead of staring at
-red/green price charts, watch your holdings grow as crops — and level up the whole
-farm as your annual dividend income crosses milestones.
+# 🌾 Dividend Dashboard
 
-Inspired by [the Trading 212 pixel-art farm on Reddit](https://www.reddit.com/r/trading212/comments/1y0hzt2/) —
-but wired to your own **Ghostfolio** instance, fully local, and designed to sit in a
-Home Assistant dashboard.
+**A pixel-art farm that grows your dividend portfolio — live in Home Assistant.**
 
+Every stock you own is a crop plot. Seeds go in the ground after each payout,
+the plants grow through five Harvest-Moon stages as the next dividend
+approaches, and ripen exactly when the money lands. The whole farm levels up
+as your annual income crosses milestones — cottage, trees, windmill, pond.
 
+*Self-hosted. Data stays on your network. No paid API services.*
 
-## True pixel-art pipeline
+![Farm](docs/screenshots/farm.png)
 
-Every asset goes through a conversion pipeline (`tools/pixelate.py`) after
-generation: true low-res pixel grid (the exact on-screen pixel density),
-quantization to a shared 40-color master palette, and an auto outline pass in
-each fill's darker shade — the technique real 16-bit art uses. Ground tiles
-are quantized to their own palettes, tiled 1:1, and the grass scatters 4 tile
-variants so nothing repeats. Weakest assets get re-rolled on the quality
-flagship model (`qwen_image_2.1`) instead of the fast one. Smooth
-pre-pixel versions are kept in `tools/smooth/` for instant rollback.
-## Living world (current)
+</div>
 
-The farm is a real-time scene driven by your Ghostfolio data:
+## What is this?
 
-- **Per-stock growth cycles** — each stock plants seeds after its own payout
-  and grows through 5 Harvest-Moon stages, ripening exactly when its next
-  dividend is due (Golden star crop for your top yielder)
-- **The farmer tends plots** — watering (damp soil after), harvesting READY
-  stocks with a sparkle, planting fresh seeds
-- **Living critters** — chickens, pig, cow, horse, goat, rabbit, ducks, a cat
-  that chases butterflies — all roaming with steering and obstacle avoidance
-- **Weather + day/night** — date-seeded weather (rain with streaks and splashes),
-  real-clock dusk/night tints, fireflies, lit windows at night
-- **Seasons** — spring blossom, summer green, autumn colors + falling leaves,
-  winter snow with a snowman; October pumpkins by the manor
-- **Data-driven events** — dividend-day fireworks + mailbox flag, rainbow after
-  rain in a strong month, milestone scaffolding toward the next farm level
-- **Scene dressing** — windmill, orchard, well, coop, flower beds, weathervane,
-  harvest countdown board, pond with lily pads and jumping fish
-- **Interactive** — click a plot for that stock's details, startle the animals,
-  sound ambience and cinematic camera toggles
-- **Home Assistant** — `/api/next-payouts` returns each stock's payout schedule
+A self-hosted web dashboard that renders your dividend portfolio as a living
+pixel-art farm, designed to sit in a Home Assistant dashboard so you stop
+staring at red/green price charts. Built for the Harvest Moon / Stardew Valley
+feeling: plant, water, grow, harvest — except the crops are your dividends.
 
-## What you get
+Inspired by the [Trading 212 pixel-art farm on Reddit](https://www.reddit.com/r/trading212/comments/1y0hzt2/) —
+wired to your own **Ghostfolio** instance instead.
 
-| View | What it shows |
+## Why Ghostfolio?
+
+The dashboard needs your portfolio: holdings, quantities, and — most
+importantly — **dividend payout dates**. Every market-data API for that is
+paid: Financial Modeling Prep, Polygon, Alpha Vantage, EOD — all keyed,
+metered, and priced per month.
+
+[Ghostfolio](https://github.com/ghostfolio/ghostfolio) replaces that entire
+layer for free:
+
+- **Open source (AGPL), self-hosted** — your transactions live in your own
+  Postgres, on your own network. Positions never leave your home.
+- **It computes everything the farm needs** — holdings, quantities, and the
+  full dividend-activity history per stock. The dashboard derives each
+  stock's payout cycle from those dates.
+- **Market quotes** come from Ghostfolio's own free data providers — the
+  dashboard never talks to a paid service.
+- **One local API** — the dashboard reads one endpoint on your LAN. No keys
+  in the browser, no per-service accounts.
+
+So the stack is: **Ghostfolio (data) → Dividend Dashboard (rendering) →
+Home Assistant (display)**.
+
+## The five views
+
+| | |
 |---|---|
-| **Farm** | Each holding is a tilled plot growing crops (wheat, carrots, pumpkins…). Bigger dividend payer → riper crop. The scene expands (trees, pond, bigger farmhouse) as you level up. |
-| **Holdings** | Harvest log: value, yield, trailing-12-month dividends per position. |
-| **Schedule** | Harvest calendar: the last 12 months of real payout history from Ghostfolio activities. |
-| **Stages** | Milestone ladder (Seedling plot → Sprout garden → Growing farm → Thriving estate → Golden harvest) with progress to the next. |
-| **Settings** | Connection health, refresh, and a ready-to-paste Home Assistant card. |
+| **Farm** — each holding is a crop plot on its own dividend cycle: seeds after a payout, five growth stages, ripe with a sparkle when the next dividend is due. The farmer waters (soil stays dark all day), harvests ready crops, plants fresh seeds. Chickens, a pig, a cow, a horse, a goat, a cat, ducks and butterflies live here; animals path home and sleep at night. | ![Holdings](docs/screenshots/holdings.png) |
+| **Holdings** — the harvest log: value, yield, trailing-12-month dividends and a per-stock days-to-payout countdown. | ![Schedule](docs/screenshots/schedule.png) |
+| **Schedule** — the harvest calendar: the last 12 months of real payout history from your Ghostfolio activities, per stock, per month. | ![Stages](docs/screenshots/stages.png) |
+| **Stages** — the farm levels up as your annual dividend income crosses milestones: Seedling plot → Sprout garden → Growing farm → Thriving estate → Golden harvest. | ![Settings](docs/screenshots/settings.png) |
+| **Settings** — connection health, refresh interval, and the ready-to-paste Home Assistant card. | |
 
-Headline stat everywhere: **estimated annual income** (trailing 12 months of received
-dividends) — the number that matters for a dividend pie, not today's P&L.
+Plus: a continuous **day/night cycle** from your real clock (dawn pink, noon,
+orange dusk, blue night with fireflies and glowing windows), **seasons**
+(spring blossom, summer green, autumn colors + falling leaves, winter snow
+and a snowman), **weather** (rain with streaks and splashes — and rainy days
+auto-water the crops, just like the game), harvest-countdown signs, crow
+swoops, pig truffles, and a spinning weathervane at the golden-roof level.
 
-## Farm stages
-
-Annual dividend income (in your base currency) decides the farm level:
-
-| Level | Milestone | Name | Perk |
-|---|---|---|---|
-| 1 | £0 | Seedling plot | A tiny patch of hope |
-| 2 | £500 | Sprout garden | Trees appear on the field |
-| 3 | £1,000 | Growing farm | Bigger farmhouse, more land |
-| 4 | £2,500 | Thriving estate | Fences, flowers, a pond |
-| 5 | £5,000 | Golden harvest | Golden roofs over the barns |
-
-(£ = whatever `BASE_CURRENCY` you set; bands are plain numbers, not FX-converted.)
-
-## Quick start (Docker Compose)
-
-Everything runs locally: the dashboard, a **Ghostfolio** instance, Postgres and Redis —
-one container each, one shared network.
+## Quick start
 
 ```bash
-cp .env.example .env
-# edit .env: change the secrets (ACCESS_TOKEN_SALT, JWT_SECRET_KEY, POSTGRES_PASSWORD, REDIS_PASSWORD)
+git clone https://github.com/kieuhoang24-prog/dividend-dashboard.git
+cd dividend-dashboard
+cp .env.example .env      # change the secrets, paste your Ghostfolio token later
 docker compose up -d --build
 ```
 
-1. Open **http://localhost:3333** → create your Ghostfolio account (first user = admin).
-2. Import your activities (buys + `DIVIDEND` activities — Ghostfolio has CSV import under
-   *Portfolio → Activities → Import*). The farm runs on whatever you've recorded.
-3. In Ghostfolio: **My Ghostfolio → Account → Security → Security token → copy**.
+### First run
+
+1. Open **http://localhost:3333** → create your Ghostfolio account (first
+   user = admin).
+2. Import your activities (*Portfolio → Activities → Import*): your **BUY**
+   trades and **DIVIDEND** payouts. The farm runs on whatever you record —
+   the growth cycles come from the dividend dates.
+3. In Ghostfolio: **My Ghostfolio → Account → Security → Security token →
+   copy**.
 4. Paste it into `.env` as `GHOSTFOLIO_TOKEN=…` and restart the dashboard:
    `docker compose up -d dashboard`
-5. Open **http://localhost:8090** — your real farm.
+5. Open **http://localhost:8090** — your real portfolio, growing.
 
-No token? No problem: the dashboard serves a deterministic **demo farm** (~£1,200/yr
-across 10 classic dividend payers) so you can see everything working first.
-
-## Configuration
-
-Set in `.env` (compose interpolates it; the dashboard reads it from the environment):
-
-| Variable | Default | Meaning |
-|---|---|---|
-| `GHOSTFOLIO_URL` | `http://ghostfolio:3333` | Where the dashboard container reaches Ghostfolio. Use `http://localhost:3333` when running the server outside Docker. |
-| `GHOSTFOLIO_TOKEN` | *(empty → demo mode)* | Your Ghostfolio security token. Exchanged server-side for a JWT — it never reaches the browser. |
-| `BASE_CURRENCY` | `GBP` | Currency for display; amounts from Ghostfolio already arrive in your base currency. |
-| `REFRESH_SECONDS` | `300` | Upstream fetch cadence; the browser reuses the server cache. |
-| `PORT` | `8090` | Host port mapping for the dashboard (8080 is taken here by RethinkDB, so we default to 8090). |
+No token yet? The dashboard runs a deterministic **demo farm** so you can see
+everything working first.
 
 ## Home Assistant
 
-Kiosk mode hides tabs and chrome for wall panels: `/?kiosk=1`.
-
-Lovelace **Webpage card** (or a native `panel: iframe` view):
+Settings → copy the iframe card, or paste this into a Lovelace manual card:
 
 ```yaml
 type: iframe
 title: Dividend Farm
 icon: mdi:flower
-url: http://YOUR_MAC_OR_SERVER:8090/?kiosk=1
+url: http://YOUR_HOST:8090/?kiosk=1
 ```
 
-The dashboard auto-refreshes from the server cache, so a wall panel stays current
-without extra automation. (Dark theme is the default — it matches HA.)
+Kiosk mode (`?kiosk=1`) hides all chrome for wall panels. The scene follows
+your real clock, so a tablet on the wall shows the farm's whole day.
+`?hour=9` / `?hour=22` pin any time of day for testing.
 
-## Data & privacy
+## Configuration
 
-- The Ghostfolio **security token lives only in `.env`** on your machine; the tiny Node
-  server holds it and exchanges it for a short-lived JWT.
-- Portfolio data is fetched server-side on demand and cached in memory — nothing is
-  stored by this app, nothing leaves your network except Ghostfolio's own market data calls.
-- If Ghostfolio is unreachable, the dashboard keeps serving its last cache (or the demo farm).
+| Variable | Default | Meaning |
+|---|---|---|
+| `GHOSTFOLIO_URL` | `http://ghostfolio:3333` | Where the dashboard reaches Ghostfolio |
+| `GHOSTFOLIO_TOKEN` | *(empty → demo mode)* | Your Ghostfolio security token (server-side only) |
+| `BASE_CURRENCY` | `GBP` | Display currency |
+| `REFRESH_SECONDS` | `300` | Data refresh cadence |
+| `PORT` | `8090` | Dashboard port |
 
-## Development
+## Maintenance
 
 ```bash
-npm install
-npm run dev        # server :8787 (tsx watch) + Vite client :5173 with /api proxy
-npm run build      # tsc + vite build (dist/) + esbuild server bundle (dist-server/)
-npm start          # serve production build on :8090
+docker compose up -d --build   # update after git pull
+docker builder prune -f        # if a rebuild ever serves stale layers
+docker compose down -v         # teardown (deletes Ghostfolio data!)
 ```
 
-Layout:
+Backup the named volumes `postgres` and `redis` for Ghostfolio's data.
+
+## Asset pipeline
+
+All art is generated on your own hardware (ComfyUI) and converted to true
+pixel art by the tools in `tools/`:
 
 ```
-server/          Hono API + static server, Ghostfolio client, dividend aggregation
-shared/types.ts  payload contract (farm bands, holdings, calendar) — one source of truth
-src/lib/sprites  8×8 pixel crop grids + palette (all art is code, no image assets)
-src/lib/farm.ts  canvas scene layout: grass, soil plots, house levels, pond
-src/views/       Farm / Holdings / Schedule / Stages / Settings
-docker-compose   dashboard + ghostfolio + postgres + redis
+gen_sprites.py   # generate sprite sheets + ground tiles (Z-Image Turbo / qwen_image_2.1)
+key_sprites.py   # chroma-key the magenta backdrop, normalize pixel density
+pixelate.py      # true low-res grids + shared 40-color palette + outlines
 ```
 
-## Troubleshooting
+Smooth pre-pixel versions are kept in `tools/smooth/`, pristine keyed
+masters in `tools/keyed/` for instant rollback.
 
-- **Stuck in demo mode** → `GHOSTFOLIO_TOKEN` empty in `.env`, or the server can't reach
-  Ghostfolio (check Settings view: *last upstream error*).
-- **Auth fails (401/403)** → the token in `.env` must be the account's *security token*
-  (Settings → Security), not a JWT.
-- **Empty holdings** → you have activities but the positions endpoint is new to your
-  Ghostfolio version: the dashboard falls back to deriving positions from BUY/SELL
-  activities (cost-basis, not market value) and says so in the payload source.
-- **Port 8090 busy** → change `PORT` in `.env` and restart.
+## Tech
 
-## Roadmap
-
-- [ ] Per-holding dividend *projection* (schedule-aware next payout estimates)
-- [ ] Seasonal crop rotation animation (plot harvest flash on payout)
-- [ ] HA custom card (instead of iframe) that renders the farm natively in Lovelace
-- [ ] The AI farm-dog chat (Town Hall) — later, with an opt-in LLM key
+React + Vite + TypeScript · Hono (Node) · canvas rendering · Docker Compose
+(dashboard + ghostfolio + postgres + redis). Portfolio data is fetched
+server-side and cached; nothing is stored by this app, and nothing leaves
+your network except Ghostfolio's own market-data calls.
 
 ## License
 
-MIT (do keep the pixel farmers company).
+MIT — do keep the pixel farmers company.
