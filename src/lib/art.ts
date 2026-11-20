@@ -78,7 +78,7 @@ export const CROP_NAMES = ["wheat", "carrot", "pumpkin", "tomato", "corn", "pota
 
 export const CROP_COLORS = ["#e8c547", "#e07b2e", "#c9631f", "#d9483b", "#e8c547", "#4e8c3c", "#8a63d2", "#c8589e"];
 
-/* ── plot sign: wooden plank on posts, two text lines ─────── */
+/* ── plot sign: big wooden plank on posts, two large text lines ── */
 export function drawSign(
   ctx: CanvasRenderingContext2D,
   symbol: string,
@@ -86,42 +86,46 @@ export function drawSign(
   cx: number,
   top: number,
 ): void {
-  const line1w = textWidth(symbol, 2);
-  const line2w = textWidth(amount, 2);
-  const w = Math.max(line1w, line2w, 24) + 10;
-  const h = 24;
+  const line1w = textWidth(symbol, 3);
+  const line2w = textWidth(amount, 3);
+  const w = Math.max(line1w, line2w, 34) + 18;
+  const h = 40;
   const x = Math.round(cx - w / 2);
   // posts
   ctx.fillStyle = C.soilDark;
-  ctx.fillRect(x - 3, top, 6, 17);
+  ctx.fillRect(x - 4, top, 8, 27);
   ctx.fillStyle = C.woodMid;
-  ctx.fillRect(x - 2, top, 4, 16);
+  ctx.fillRect(x - 3, top, 6, 26);
   ctx.fillStyle = C.woodLight;
-  ctx.fillRect(x - 2, top, 2, 16);
+  ctx.fillRect(x - 3, top, 3, 26);
   ctx.fillStyle = C.soilDark;
-  ctx.fillRect(x + w - 3, top, 6, 17);
+  ctx.fillRect(x + w - 4, top, 8, 27);
   ctx.fillStyle = C.woodMid;
-  ctx.fillRect(x + w - 2, top, 4, 16);
+  ctx.fillRect(x + w - 3, top, 6, 26);
   ctx.fillStyle = C.woodLight;
-  ctx.fillRect(x + w - 2, top, 2, 16);
-  // rope loop hints
+  ctx.fillRect(x + w - 3, top, 3, 26);
+  // rope ties
   ctx.fillStyle = C.woodTan;
-  ctx.fillRect(x - 1, top, 2, 2);
-  ctx.fillRect(x + w - 1, top, 2, 2);
+  ctx.fillRect(x - 2, top, 3, 3);
+  ctx.fillRect(x + w - 1, top, 3, 3);
   // plank
   ctx.fillStyle = C.outline;
-  ctx.fillRect(x - 3, top + 2, w + 6, h);
+  ctx.fillRect(x - 4, top + 2, w + 8, h);
   ctx.fillStyle = C.woodTan;
-  ctx.fillRect(x - 2, top + 3, w + 4, h - 2);
+  ctx.fillRect(x - 3, top + 3, w + 6, h - 2);
   ctx.fillStyle = C.woodMid;
-  ctx.fillRect(x - 2, top + h - 2, w + 4, 3);
+  ctx.fillRect(x - 3, top + h - 3, w + 6, 4);
   ctx.fillStyle = C.woodLight;
-  ctx.fillRect(x - 2, top + 3, w + 4, 2);
+  ctx.fillRect(x - 3, top + 3, w + 6, 3);
+  // wood grain
+  ctx.fillStyle = C.wood;
+  ctx.fillRect(x, top + 14, w, 1);
+  ctx.fillRect(x, top + 28, w, 1);
   // nails
   ctx.fillStyle = C.stoneDark;
-  ctx.fillRect(x, top + h / 2 - 1, 1, 1);
-  ctx.fillRect(x + w, top + h / 2 - 1, 1, 1);
-  // text
-  drawText(ctx, symbol, x + Math.round((w - line1w) / 2), top + 5, C.text, 2, C.outline);
-  drawText(ctx, amount, x + Math.round((w - line2w) / 2), top + 16, C.wheat, 2, C.outline);
+  ctx.fillRect(x + 1, top + h / 2 - 1, 2, 2);
+  ctx.fillRect(x + w - 3, top + h / 2 - 1, 2, 2);
+  // text: ticker + price, both large
+  drawText(ctx, symbol, x + Math.round((w - line1w) / 2), top + 7, C.text, 3, C.outline);
+  drawText(ctx, amount, x + Math.round((w - line2w) / 2), top + 24, C.wheat, 3, C.outline);
 }

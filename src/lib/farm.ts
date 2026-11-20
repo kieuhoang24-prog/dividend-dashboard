@@ -28,7 +28,7 @@ import {
 export const SCENE_W = 720;
 const FIELD_TOP = 152;
 const PLOT_W = 3 * TILE;
-const ROW_PITCH = PLOT_W + 44;
+const ROW_PITCH = PLOT_W + 62;
 const COLS = 3;
 const COL_X = [26, 196, 366];
 const STUB_X = Math.round((COL_X[0] + PLOT_W + COL_X[1]) / 2);
@@ -706,17 +706,17 @@ export function drawScene(
   try {
     ctx.filter = seasonFilter;
   } catch { /* unsupported: draw as-is */ }
-  drawAsset(ctx, "tree-oak", 30, 12, 120);
-  drawPropSprite(ctx, "tree-blossom", 146, 148, 126, false);
+  drawAsset(ctx, "tree-oak", 24, 10, 116);
+  drawPropSprite(ctx, "tree-blossom", 172, 150, 122, false);
   drawPropSprite(ctx, "tree-pine", 262, 104, 88, false);
   drawPropSprite(ctx, "tree-apple", 356, 144, 108, false);
   try {
     ctx.filter = "none";
   } catch { /* ignore */ }
 
-  // ── windmill in the open meadow, clear of the manor ──
+  // ── windmill in the open meadow, tower in line with the 2nd crop row ──
   const windCells = ["wind0", "wind1", "wind2", "wind3"] as const;
-  drawPropSprite(ctx, windCells[Math.floor(tick / 2) % 4], 655, FIELD_TOP + 122, 140);
+  drawPropSprite(ctx, windCells[Math.floor(tick / 2) % 4], 655, FIELD_TOP + ROW_PITCH + PLOT_W, 140);
 
   // ── pond / meadow props (elm lives here too) ──
   try {
@@ -769,7 +769,7 @@ export function drawScene(
         }
       }
     }
-    drawSign(ctx, h.symbol, `£${Math.round(h.t12mDividend)}/yr`, px + PLOT_W / 2, py + PLOT_W + 8);
+    drawSign(ctx, h.symbol, `£${Math.round(h.t12mDividend)}/yr`, px + PLOT_W / 2, py + PLOT_W + 6);
   });
 
   drawPropSprite(ctx, "scarecrow", 318, FIELD_TOP + 64, 50);
@@ -860,7 +860,7 @@ export function drawScene(
   // so they brush edges but never stand on crops), scarecrow, coop, yard props
   const solid: Rect[] = [
     { x: hx - 12, y: hy - 6, w: hw + 24, h: hh + 12 },
-    { x: 604, y: FIELD_TOP + 116, w: 100, h: 150 },
+    { x: 602, y: FIELD_TOP + ROW_PITCH + 6, w: 106, h: 156 },
     ...(level >= 4 ? [{ x: 532, y: height - 132, w: 136, h: 64 }] : [{ x: 560, y: height - 160, w: 90, h: 60 }]),
     ...holdings.map((_, i) => ({
       x: COL_X[i % COLS] + 4,
