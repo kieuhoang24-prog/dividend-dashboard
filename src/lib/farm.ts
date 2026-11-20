@@ -20,9 +20,10 @@ export const SCENE_W = 720;
 const FIELD_TOP = 152;
 const PLOT_W = 3 * TILE; // 96
 const ROW_PITCH = PLOT_W + 44;
-const COL_X = [26, 26 + PLOT_W + 76];
-const HOUSE_KEYS = ["house-cabin", "house-barn", "house-manor"] as const;
-const HOUSE_W = [150, 175, 205];
+const COLS = 3;
+const COL_X = [26, 196, 366];
+const STUB_X = Math.round((COL_X[0] + PLOT_W + COL_X[1]) / 2); // gutter walkway between col 1 and 2
+const HOUSE_KEY = "house-manor";
 
 function rng(seed: number): () => number {
   let s = seed >>> 0;
@@ -37,7 +38,7 @@ export function cropName(cropIndex: number): string {
 }
 
 export function sceneSize(holdings: HoldingRow[]): { width: number; height: number } {
-  const rows = Math.max(1, Math.ceil(holdings.length / 2));
+  const rows = Math.max(1, Math.ceil(holdings.length / COLS));
   return { width: SCENE_W, height: FIELD_TOP + rows * ROW_PITCH + 90 };
 }
 
@@ -61,26 +62,88 @@ function ellipseFill(ctx: CanvasRenderingContext2D, cx: number, cy: number, rx: 
 }
 
 /* ── grass ────────────────────────────────────────────────── */
+function drawTuft(ctx: CanvasRenderingContext2D, x: number, y: number, variant: number): void {
+  if (variant === 0) {
+    p(ctx, C.gDark, x, y + 2, 1, 3);
+    p(ctx, C.gLight, x + 2, y + 1, 1, 4);
+    p(ctx, C.gDark, x + 4, y + 2, 1, 3);
+    p(ctx, C.gHi, x + 2, y, 1, 1);
+    p(ctx, C.gBase, x + 1, y + 4, 3, 1);
+  } else if (variant === 1) {
+    p(ctx, C.gLight, x, y + 2, 1, 2);
+    p(ctx, C.gDark, x + 1, y + 1, 1, 3);
+    p(ctx, C.gLight, x + 3, y, 1, 4);
+    p(ctx, C.gDark, x + 4, y + 2, 1, 2);
+    p(ctx, C.gHi, x + 3, y, 1, 1);
+  } else {
+    p(ctx, C.gDark, x + 1, y + 3, 4, 1);
+    p(ctx, C.gLight, x, y + 1, 1, 2);
+    p(ctx, C.gDark, x + 2, y, 1, 3);
+    p(ctx, C.gLight, x + 5, y + 1, 1, 2);
+    p(ctx, C.gHi, x + 2, y, 1, 1);
+  }
+}
+
+function drawTallGrass(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+  p(ctx, C.gDark, x + 1, y + 4, 6, 5);
+  p(ctx, C.gBase, x + 2, y + 6, 4, 2);
+  p(ctx, C.gDark, x + 2, y + 2, 1, 4);
+  p(ctx, C.gDark, x + 5, y + 1, 1, 5);
+  p(ctx, C.gLight, x + 3, y, 1, 6);
+  p(ctx, C.gLight, x + 4, y + 3, 1, 4);
+  p(ctx, C.gHi, x + 3, y, 1, 2);
+  p(ctx, C.gDark, x, y + 7, 8, 1);
+}
+
 function paintGrass(ctx: CanvasRenderingContext2D, w: number, h: number): void {
   ctx.fillStyle = C.gBase;
   ctx.fillRect(0, 0, w, h);
   const r = rng(11);
+  // tonal patchwork: 8px noise cells in three greens
+  for (let cy = 0; cy < h; cy += 8) {
+    for (let cx = 0; cx < w; cx += 8) {
+      const t = r();
+      ctx.fillStyle = t > 0.74 ? C.gLight : t < 0.2 ? C.gDark : C.gBase;
+      ctx.fillRect(cx, cy, 8, 8);
+    }
+  }
+  // large soft meadow/shade patches
   ctx.save();
-  ctx.globalAlpha = 0.12;
+  ctx.globalAlpha = 0.1;
   for (let i = 0; i < 10; i++) {
     ctx.fillStyle = r() > 0.5 ? C.gLight : C.gDark;
-    ellipseFill(ctx, Math.floor(r() * w), Math.floor(r() * h), 16 + r() * 30, 9 + r() * 15);
+    ellipseFill(ctx, Math.floor(r() * w), Math.floor(r() * h), 18 + r() * 34, 10 + r() * 16);
   }
   ctx.restore();
-  for (let i = 0; i < 120; i++) {
+  // pixel dither
+  for (let i = 0; i < (w * h) / 40; i++) {
     const x = Math.floor(r() * w);
     const y = Math.floor(r() * h);
-    ctx.fillStyle = r() > 0.6 ? C.gLight : C.gDark;
-    ctx.fillRect(x, y, 3, 1);
-    if (r() > 0.8) {
-      ctx.fillStyle = C.gHi;
-      ctx.fillRect(x + 1, y - 2, 1, 2);
+    ctx.fillStyle = r() > 0.5 ? C.gLight : C.gDark;
+    ctx.fillRect(x, y, 2, 1);
+  }
+  // tuft sprites + tall clumps
+  for (let i = 0; i < 100; i++) drawTuft(ctx, Math.floor(r() * (w - 8)), Math.floor(r() * (h - 10)), Math.floor(r() * 3));
+  for (let i = 0; i < 16; i++) drawTallGrass(ctx, Math.floor(r() * (w - 10)), Math.floor(r() * (h - 12)));
+  // worn dirt patches, dithered into the grass
+  for (let i = 0; i < 6; i++) {
+    const cx = Math.floor(r() * w);
+    const cy = Math.floor(r() * h);
+    ctx.save();
+    ctx.globalAlpha = 0.4;
+    ctx.fillStyle = C.soil;
+    ellipseFill(ctx, cx, cy, 10 + r() * 16, 5 + r() * 8);
+    ctx.restore();
+    for (let d = 0; d < 14; d++) {
+      p(ctx, C.soilDark, cx - 10 + Math.floor(r() * 20), cy - 6 + Math.floor(r() * 12), 1, 1);
     }
+  }
+  // tiny daisies
+  for (let i = 0; i < 34; i++) {
+    const x = Math.floor(r() * (w - 4));
+    const y = Math.floor(r() * (h - 4));
+    p(ctx, C.white, x, y, 2, 2);
+    p(ctx, C.wheat, x, y, 1, 1);
   }
 }
 
@@ -104,6 +167,22 @@ function pathSeg(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: numb
   for (let i = 0; i < (w + h) / 60; i++) {
     const edge = r() > 0.5;
     ctx.fillRect(edge ? x - 9 : x + w + 5, y + Math.floor(r() * h), 3, 2);
+  }
+  // dithered edges: soil dissolves into grass instead of a hard rectangle
+  if (w > h) {
+    for (let i = 0; i < w + 12; i += 2) {
+      if (r() > 0.45) p(ctx, C.gDark, x - 9 + i, y - 9, 1, 1);
+      if (r() > 0.45) p(ctx, C.gDark, x - 9 + i, y + h + 8, 1, 1);
+      if (r() > 0.7) p(ctx, C.soilLight, x - 8 + i, y - 8, 1, 1);
+      if (r() > 0.7) p(ctx, C.soilLight, x - 8 + i, y + h + 8, 1, 1);
+    }
+  } else {
+    for (let i = 0; i < h + 12; i += 2) {
+      if (r() > 0.45) p(ctx, C.gDark, x - 9, y - 9 + i, 1, 1);
+      if (r() > 0.45) p(ctx, C.gDark, x + w + 8, y - 9 + i, 1, 1);
+      if (r() > 0.7) p(ctx, C.soilLight, x - 8, y - 9 + i, 1, 1);
+      if (r() > 0.7) p(ctx, C.soilLight, x + w + 8, y - 9 + i, 1, 1);
+    }
   }
 }
 
@@ -141,6 +220,61 @@ function fenceRun(ctx: CanvasRenderingContext2D, x: number, y: number, w: number
     p(ctx, C.outline, px2, y, 6, 14);
     p(ctx, C.woodMid, px2, y + 1, 5, 12);
     p(ctx, C.woodLight, px2, y + 1, 2, 12);
+  }
+}
+
+/* ── free-range chickens ──────────────────────────────────── */
+interface Chicken {
+  x: number;
+  y: number;
+  tx: number;
+  ty: number;
+  peck: number;
+}
+let flock: Chicken[] | null = null;
+
+function updateFlock(blocked: Rect[], width: number, height: number, frame: number): void {
+  const r = rng(77 + frame * 13);
+  if (!flock) {
+    flock = [0, 1, 2].map((i) => ({
+      x: 60 + i * 46,
+      y: FIELD_TOP - 36 + i * 10,
+      tx: 60 + i * 46,
+      ty: FIELD_TOP - 36 + i * 10,
+      peck: i,
+    }));
+  }
+  for (const c of flock) {
+    // keep inside the map
+    c.x = Math.max(18, Math.min(width - 18, c.x));
+    c.y = Math.max(70, Math.min(height - 20, c.y));
+    if (c.peck > 0) {
+      c.peck--;
+      continue;
+    }
+    const dx = c.tx - c.x;
+    const dy = c.ty - c.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 8) {
+      // arrived: peck a while, then choose a new target anywhere on the map
+      if (r() < 0.5) {
+        c.peck = 1 + Math.floor(r() * 2);
+      }
+      c.tx = 22 + r() * (width - 44);
+      c.ty = 74 + r() * (height - 104);
+      continue;
+    }
+    const step = 7;
+    const nx = c.x + (dx / dist) * step;
+    const ny = c.y + (dy / dist) * step;
+    if (blocked.some((b) => near(b, nx, ny, 2))) {
+      // obstacle: pick a fresh target
+      c.tx = 22 + r() * (width - 44);
+      c.ty = 74 + r() * (height - 104);
+    } else {
+      c.x = nx;
+      c.y = ny;
+    }
   }
 }
 
@@ -200,29 +334,28 @@ export function drawScene(
 
   paintGrass(ctx, width, height);
 
-  // ── house zone (generated sprite) ──
+  // ── house zone (manor sprite at every level) ──
   const tier = (level >= 4 ? 2 : level >= 2 ? 1 : 0) as 0 | 1 | 2;
-  const hw = HOUSE_W[tier];
-  const aspect = assetAspect(HOUSE_KEYS[tier]);
+  const hw = [178, 190, 200][tier];
+  const aspect = assetAspect(HOUSE_KEY);
   const hh = Math.round(hw * aspect);
-  const hx = width - hw - 24;
+  const hx = width - hw - 22;
   const hy = 6;
-  const house = drawAsset(ctx, HOUSE_KEYS[tier], hx, hy, hw);
+  const house = drawAsset(ctx, HOUSE_KEY, hx, hy, hw);
   const gateX = hx + Math.round(hw / 2);
   const doorY = hy + hh;
-  const fy = doorY + 6;
+  const fy = doorY + 4;
 
   fenceRun(ctx, hx - 26, fy, Math.max(12, gateX - hx - 10));
   fenceRun(ctx, gateX + 14, fy, Math.max(12, hx + hw + 26 - gateX - 14));
 
-  drawPropSprite(ctx, "trough", hx - 44, fy + 12, 20);
-  drawPropSprite(ctx, "bush", hx + hw + 14, fy + 14, 30);
+  drawPropSprite(ctx, "trough", hx - 46, fy + 14, 20);
+  drawPropSprite(ctx, "bush", hx + hw + 12, fy + 14, 30);
 
-  // ── path: gate → down → left to the field (routed below the yard fence) ──
-  const PATH_Y = fy + 18;
-  pathSeg(ctx, gateX, doorY, gateX, PATH_Y, r);
-  pathSeg(ctx, COL_X[1] + PLOT_W + 18, PATH_Y, gateX, PATH_Y, r);
-  pathSeg(ctx, COL_X[1] + PLOT_W + 18, PATH_Y, COL_X[1] + PLOT_W + 18, FIELD_TOP + 44, r);
+  // ── path: horizontal above the field, stub down the col gutter walkway ──
+  const PATH_Y = FIELD_TOP - 12;
+  pathSeg(ctx, STUB_X, PATH_Y, gateX, PATH_Y, r);
+  pathSeg(ctx, STUB_X, PATH_Y, STUB_X, FIELD_TOP + 3 * ROW_PITCH + 4, r);
 
   // ── tree cluster (generated sprite) ──
   if (level >= 2) {
@@ -235,7 +368,7 @@ export function drawScene(
   }
   if (level >= 3) {
     drawAsset(ctx, "tree-oak", 6, 60, 96);
-    drawPropSprite(ctx, "rock", 236, 116, 24);
+    drawPropSprite(ctx, "rock", 288, 132, 22);
   }
 
   // ── pond or lower-right props ──
@@ -249,8 +382,8 @@ export function drawScene(
   // ── field ──
   const maxDiv = Math.max(1, ...holdings.map((h) => h.t12mDividend));
   holdings.forEach((h, i) => {
-    const px = COL_X[i % 2];
-    const py = FIELD_TOP + Math.floor(i / 2) * ROW_PITCH;
+    const px = COL_X[i % COLS];
+    const py = FIELD_TOP + Math.floor(i / COLS) * ROW_PITCH;
     soilPlot(ctx, px, py, r);
     const ratio = h.t12mDividend / maxDiv;
     const stage = h.t12mDividend > 0 ? Math.max(1, Math.min(3, Math.round(ratio * 3))) : 0;
@@ -268,24 +401,21 @@ export function drawScene(
     drawSign(ctx, h.symbol, `£${Math.round(h.t12mDividend)}/yr`, px + PLOT_W / 2, py + PLOT_W + 8);
   });
 
-  drawPropSprite(ctx, "scarecrow", COL_X[1] + PLOT_W + 44, FIELD_TOP + 54, 50);
-  for (const [bx, by] of [[150, FIELD_TOP - 42], [330, FIELD_TOP + 134]] as const) {
-    drawPropSprite(ctx, frame === 1 ? "chicken-peck" : "chicken", bx + (frame >= 2 ? 6 : 0), by, 18);
-  }
+  drawPropSprite(ctx, "scarecrow", 181, FIELD_TOP + 62, 50);
 
   // ── scatter: flowers + pebbles avoiding everything built ──
-  const fieldBottom = FIELD_TOP + Math.ceil(holdings.length / 2) * ROW_PITCH;
+  const fieldBottom = FIELD_TOP + Math.ceil(holdings.length / COLS) * ROW_PITCH;
   const blocked: Rect[] = [
     { x: hx - 34, y: hy - 14, w: hw + 68, h: hh + 34 },
     { x: 12, y: 60, w: 300, h: 84 },
     ...holdings.map((_, i) => ({
-      x: COL_X[i % 2] - 8,
-      y: FIELD_TOP + Math.floor(i / 2) * ROW_PITCH - 6,
+      x: COL_X[i % COLS] - 8,
+      y: FIELD_TOP + Math.floor(i / COLS) * ROW_PITCH - 6,
       w: PLOT_W + 16,
       h: PLOT_W + 46,
     })),
     { x: gateX - 12, y: hy + hh - 8, w: 26, h: fieldBottom - hy - hh },
-    { x: COL_X[1] + PLOT_W + 4, y: FIELD_TOP - 40, w: 34, h: 110 },
+    { x: COL_X[2] + PLOT_W + 4, y: FIELD_TOP - 40, w: 34, h: 110 },
     ...(level >= 4 ? [pondRect(height)] : [{ x: 440, y: height - 220, w: 220, h: 120 }]),
   ];
   const petals = [C.pink, C.white, C.red, C.orange, C.purple];
@@ -308,10 +438,16 @@ export function drawScene(
     }
   }
 
+  // ── free-range chickens (persistent wander, bounce off obstacles) ──
+  updateFlock(blocked, width, height, frame);
+  for (const c of flock!) {
+    drawPropSprite(ctx, c.peck > 0 ? "chicken-peck" : "chicken", c.x, c.y, 18);
+  }
+
   // ── chimney smoke ──
   if (tier >= 1) {
-    const chimX = hx + Math.round(hw * 0.74);
-    const chimY = hy + Math.round(hh * 0.06);
+    const chimX = hx + Math.round(hw * 0.56);
+    const chimY = hy + Math.round(hh * 0.03);
     ctx.save();
     ctx.globalAlpha = 0.75;
     const wrap = (v: number, m: number) => ((v % m) + m) % m;
