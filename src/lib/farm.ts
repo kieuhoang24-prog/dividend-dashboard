@@ -265,15 +265,15 @@ function pondRect(height: number): Rect {
 type CritterKind = "chicken" | "pig" | "cow" | "farmer" | "duck" | "cat" | "horse" | "goat" | "rabbit";
 
 const CRITTER_DEFS: Record<CritterKind, { n: number; speed: number; size: number }> = {
-  chicken: { n: 3, speed: 9, size: 18 },
-  pig: { n: 1, speed: 5, size: 40 },
-  cow: { n: 1, speed: 4, size: 52 },
-  farmer: { n: 1, speed: 8, size: 46 },
-  duck: { n: 2, speed: 3, size: 20 },
-  cat: { n: 1, speed: 7, size: 24 },
-  horse: { n: 1, speed: 4, size: 54 },
-  goat: { n: 1, speed: 4, size: 34 },
-  rabbit: { n: 1, speed: 8, size: 16 },
+  chicken: { n: 3, speed: 10, size: 18 },
+  pig: { n: 1, speed: 6, size: 40 },
+  cow: { n: 1, speed: 5, size: 52 },
+  farmer: { n: 1, speed: 9, size: 46 },
+  duck: { n: 2, speed: 4, size: 20 },
+  cat: { n: 1, speed: 8, size: 24 },
+  horse: { n: 1, speed: 5, size: 54 },
+  goat: { n: 1, speed: 5, size: 34 },
+  rabbit: { n: 1, speed: 10, size: 16 },
 };
 
 interface Critter {
@@ -291,7 +291,7 @@ let critters: Critter[] | null = null;
 interface Butterfly { x: number; y: number; tx: number; ty: number; tick: number }
 let butterflies: Butterfly[] | null = null;
 
-let brain: { plotIdx: number; mode: "walk" | "water" | "harvest" | "plant"; actionLeft: number } | null = null;
+let brain: { plotIdx: number; mode: "walk" | "water" | "harvest" | "plant"; actionLeft: number; stroll: { x: number; y: number } | null } | null = null;
 let prevLevel = 0;
 const prevNext = new Map<string, string>();
 let rainbowUntil = -999;
@@ -321,26 +321,25 @@ function critterCell(c: Critter): PropName {
   return c.kind as PropName;
 }
 
-function zoneFor(kind: CritterKind, width: number, height: number, fieldBottom: number, level: number): Rect {
-  switch (kind) {
-    case "duck":
-      return level >= 4 ? pondRect(height) : { x: 442, y: FIELD_TOP + 2, w: 78, h: 48 };
-    case "horse":
-    case "goat":
-      return { x: 470, y: fieldBottom - 80, w: Math.max(60, width - 490), h: Math.max(60, height - fieldBottom - 30) };
-    case "rabbit":
-      return { x: 24, y: 96, w: 270, h: 70 };
-    default:
-      return { x: 20, y: 70, w: width - 40, h: height - 90 };
-  }
+function zoneFor(kind: CritterKind, width: number, height: number, level: number): Rect | null {
+  // full-map roam for everyone; only ducks bias to water when it exists
+  if (kind === "duck" && level >= 4) return pondRect(height);
+  return null;
 }
 
-function pickTarget(c: Critter, blocked: Rect[], r: () => number, width: number, height: number, fieldBottom: number, level: number): void {
-  const zone = zoneFor(c.kind, width, height, fieldBottom, level);
-  for (let attempt = 0; attempt < 6; attempt++) {
-    const tx = Math.max(22, Math.min(width - 22, zone.x + r() * zone.w));
-    const ty = Math.max(74, Math.min(height - 20, zone.y + r() * zone.h));
-    if (!blocked.some((b) => near(b, tx, ty, 2)) || attempt === 5) {
+function pickTarget(
+  c: Critter,
+  blocked: Rect[],
+  r: () => number,
+  width: number,
+  height: number,
+  level: number,
+): void {
+  const zone = zoneFor(c.kind, width, height, level);
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const tx = Math.max(22, Math.min(width - 22, zone ? zone.x + r() * zone.w : 22 + r() * (width - 44)));
+    const ty = Math.max(74, Math.min(height - 20, zone ? zone.y + r() * zone.h : 74 + r() * (height - 104)));
+    if (!blocked.some((b) => near(b, tx, ty, 2)) || attempt === 7) {
       c.tx = tx;
       c.ty = ty;
       return;
@@ -369,7 +368,6 @@ function updateCritters(
   blocked: Rect[],
   width: number,
   height: number,
-  fieldBottom: number,
   level: number,
   world: World,
   holdings: HoldingRow[],
@@ -378,15 +376,15 @@ function updateCritters(
   const r = rng(77 + Math.floor(world.windT * 100));
   if (!critters) {
     const spawnAt: Record<CritterKind, [number, number]> = {
-      chicken: [110, FIELD_TOP - 44],
-      pig: [545, height - 165],
-      cow: [625, height - 150],
+      chicken: [150, height - 96],
+      pig: [545, height - 170],
+      cow: [620, height - 178],
       farmer: [STUB_X + 8, FIELD_TOP + 40],
-      duck: [600, height - 100],
-      cat: [220, FIELD_TOP + 60],
-      horse: [560, fieldBottom - 60],
-      goat: [600, fieldBottom - 40],
-      rabbit: [70, FIELD_TOP - 50],
+      duck: [500, height - 122],
+      cat: [480, FIELD_TOP + 100],
+      horse: [585, height - 178],
+      goat: [650, height - 174],
+      rabbit: [64, FIELD_TOP - 46],
     };
     critters = [];
     for (const [kind, def] of Object.entries(CRITTER_DEFS) as [CritterKind, { n: number; speed: number; size: number }][]) {
@@ -396,7 +394,7 @@ function updateCritters(
       }
     }
   }
-  if (!brain) brain = { plotIdx: 0, mode: "walk", actionLeft: 0 };
+  if (!brain) brain = { plotIdx: 0, mode: "walk", actionLeft: 0, stroll: null };
 
   // butterflies over the flower zones; the cat hunts the nearest one
   if (!butterflies) {
@@ -411,8 +409,20 @@ function updateCritters(
     const dy = b.ty - b.y;
     const d = Math.hypot(dx, dy) || 1;
     if (d < 10) {
-      b.tx = 60 + r() * (width - 120);
-      b.ty = 70 + r() * (fieldBottom - 20);
+      // keep butterflies off the crop plots so the cat never chases them there
+      let tries = 0;
+      do {
+        b.tx = 60 + r() * (width - 120);
+        b.ty = 70 + r() * (height * 0.82);
+        tries++;
+      } while (
+        tries < 6 &&
+        holdings.some((_, i) => {
+          const px = COL_X[i % COLS];
+          const py = FIELD_TOP + Math.floor(i / COLS) * ROW_PITCH;
+          return b.tx > px - 6 && b.tx < px + PLOT_W + 6 && b.ty > py - 6 && b.ty < py + PLOT_W + 6;
+        })
+      );
       continue;
     }
     b.x += (dx / d) * 2.2 + Math.sin(b.tick * 0.8) * 0.7;
@@ -436,13 +446,41 @@ function updateCritters(
     if (c.pause > 0) {
       c.pause--;
       if (c.kind === "farmer" && c.pause === 0) {
-        brain!.mode = "walk";
-        brain!.plotIdx = (brain!.plotIdx + 1) % Math.max(1, holdings.length);
-        const rect = plotRects(holdings)[brain!.plotIdx];
-        if (rect) {
-          c.tx = rect.x + PLOT_W / 2;
-          c.ty = rect.y + PLOT_W - 8;
+        if (brain!.stroll) {
+          // stroll finished → resume the plot tour
+          brain!.stroll = null;
+          brain!.mode = "walk";
+          const rect = plotRects(holdings)[brain!.plotIdx];
+          if (rect) {
+            c.tx = rect.x + PLOT_W / 2;
+            c.ty = rect.y + PLOT_W - 8;
+          }
+        } else {
+          brain!.plotIdx = (brain!.plotIdx + 1) % Math.max(1, holdings.length);
+          if (brain!.plotIdx === 0) {
+            // full tour done: take a stroll anywhere on the map first
+            pickTarget(c, blocked, r, width, height, level);
+            brain!.stroll = { x: c.tx, y: c.ty };
+          } else {
+            brain!.mode = "walk";
+            const rect = plotRects(holdings)[brain!.plotIdx];
+            if (rect) {
+              c.tx = rect.x + PLOT_W / 2;
+              c.ty = rect.y + PLOT_W - 8;
+            }
+          }
         }
+      }
+      continue;
+    }
+    // farmer strolling: just walk to the stroll point
+    if (c.kind === "farmer" && brain!.stroll) {
+      if (Math.hypot(c.tx - c.x, c.ty - c.y) < 10) {
+        c.pause = 3;
+      }
+      if (!tryStep(c, c.tx, c.ty, blocked, width, height, speed)) {
+        brain!.stroll = null;
+        brain!.mode = "walk";
       }
       continue;
     }
@@ -482,7 +520,36 @@ function updateCritters(
         burst(world, "drop", rect.x + PLOT_W / 2 + (r() - 0.5) * 44, rect.y + 8, 2, ["#8fd3df"], 0.9);
       }
     }
+    // hard clamp: nothing but ducks stands on crop soil
+    if (c.kind !== "duck") {
+      for (const b of blocked) {
+        if (near(b, c.x, c.y, 0) && b.h === PLOT_W - 8) {
+          // inside a plot rect: push to the nearest horizontal edge
+          const midX = b.x + b.w / 2;
+          c.x = c.x < midX ? b.x - 3 : b.x + b.w + 3;
+        }
+      }
+    }
     const stuck = blocked.some((b) => near(b, c.x, c.y, 2));
+    if (stuck) {
+      // trapped inside solid terrain (bad spawn or push): teleport to the
+      // nearest open point — tryStep alone can never escape a small rect
+      let done = false;
+      for (let radius = 14; radius <= 100 && !done; radius += 14) {
+        for (let a = 0; a < Math.PI * 2 && !done; a += Math.PI / 10) {
+          const ex = c.x + Math.cos(a) * radius;
+          const ey = c.y + Math.sin(a) * radius;
+          if (ex < 18 || ex > width - 18 || ey < 70 || ey > height - 20) continue;
+          if (!blocked.some((b) => near(b, ex, ey, 2))) {
+            c.x = ex;
+            c.y = ey;
+            done = true;
+          }
+        }
+      }
+      pickTarget(c, blocked, r, width, height, level);
+      continue;
+    }
     const dist = Math.hypot(c.tx - c.x, c.ty - c.y);
     if (dist < 8) {
       c.pause = 1 + Math.floor(r() * 3);
@@ -490,12 +557,12 @@ function updateCritters(
       if (c.kind === "chicken" && r() < 0.08 && !egg) {
         egg = { x: c.x + 6, y: c.y, until: world.windT + 40 };
       }
-      pickTarget(c, blocked, r, width, height, fieldBottom, level);
+      pickTarget(c, blocked, r, width, height, level);
       continue;
     }
-    if (stuck) pickTarget(c, blocked, r, width, height, fieldBottom, level);
+    if (stuck) pickTarget(c, blocked, r, width, height, level);
     if (!tryStep(c, c.tx, c.ty, blocked, width, height, speed)) {
-      pickTarget(c, blocked, r, width, height, fieldBottom, level);
+      pickTarget(c, blocked, r, width, height, level);
     }
   }
 }
@@ -610,8 +677,8 @@ export function drawScene(
   drawPropSprite(ctx, "well", hx - 58, fy + 18, 44);
   drawPropSprite(ctx, "trough", hx - 6, fy + 16, 20);
   drawPropSprite(ctx, "mailbox", hx + hw + 16, fy + 16, 26, mailboxToday);
-  drawPropSprite(ctx, "bed-tulip", hx + 44, fy + 16, 24);
-  drawPropSprite(ctx, "bed-mixed", hx + 108, fy + 16, 24);
+  drawPropSprite(ctx, "bed-tulip", hx + 30, fy + 18, 30);
+  drawPropSprite(ctx, "bed-mixed", hx + 95, fy + 18, 30);
   drawPropSprite(ctx, "crates", hx + 4, fy + 20, 24);
   drawPropSprite(ctx, "bush", hx + hw + 40, fy + 16, 30);
 
@@ -624,7 +691,7 @@ export function drawScene(
     pathSeg(ctx, cx + PLOT_W / 2, FIELD_TOP + PLOT_W + 30, cx + PLOT_W / 2, FIELD_TOP - 10, r);
   }
 
-  // ── orchard (season-filtered trees) ──
+  // ── orchard (season-filtered trees, spread so nothing stacks) ──
   const seasonFilter =
     world.season === "autumn"
       ? "hue-rotate(-38deg) saturate(1.35) brightness(0.98)"
@@ -637,21 +704,26 @@ export function drawScene(
   try {
     ctx.filter = seasonFilter;
   } catch { /* unsupported: draw as-is */ }
-  drawAsset(ctx, "tree-oak", 40, 14 + Math.max(0, sway), 124);
-  drawPropSprite(ctx, "tree-blossom", 158, 150, 128, false);
-  drawAsset(ctx, "tree-oak", 6, 66, 96);
-  drawPropSprite(ctx, "tree-apple", 152, 152, 118, false);
-  drawPropSprite(ctx, "tree-pine", 300, 120, 96, false);
-  drawPropSprite(ctx, "tree-elm", 452, 150, 96, false);
+  drawAsset(ctx, "tree-oak", 30, 12, 120);
+  drawPropSprite(ctx, "tree-blossom", 146, 148, 126, false);
+  drawPropSprite(ctx, "tree-pine", 262, 104, 88, false);
+  drawPropSprite(ctx, "tree-apple", 356, 144, 108, false);
   try {
     ctx.filter = "none";
   } catch { /* ignore */ }
 
-  // ── windmill (spinning) ──
+  // ── windmill in the open meadow, clear of the manor ──
   const windCells = ["wind0", "wind1", "wind2", "wind3"] as const;
-  drawPropSprite(ctx, windCells[Math.floor(tick / 2) % 4], 660, FIELD_TOP + 96, 130);
+  drawPropSprite(ctx, windCells[Math.floor(tick / 2) % 4], 655, FIELD_TOP + 122, 140);
 
-  // ── pond / meadow props ──
+  // ── pond / meadow props (elm lives here too) ──
+  try {
+    ctx.filter = seasonFilter;
+  } catch { /* ignore */ }
+  drawPropSprite(ctx, "tree-elm", 498, fieldBottom - 116, 88, false);
+  try {
+    ctx.filter = "none";
+  } catch { /* ignore */ }
   if (level >= 4) {
     drawPond(ctx, height, tick, world);
   } else {
@@ -698,7 +770,9 @@ export function drawScene(
     drawSign(ctx, h.symbol, `£${Math.round(h.t12mDividend)}/yr`, px + PLOT_W / 2, py + PLOT_W + 8);
   });
 
-  drawPropSprite(ctx, "scarecrow", 181, FIELD_TOP + 62, 50);
+  drawPropSprite(ctx, "scarecrow", 318, FIELD_TOP + 64, 50);
+  // chicken coop at the end of the gutter walkway
+  drawPropSprite(ctx, "coop", 150, fieldBottom + 10, 48);
 
   // harvest countdown board
   const nextPayout = holdings
@@ -780,7 +854,41 @@ export function drawScene(
   }
 
   // ── critters ──
-  updateCritters(blocked, width, height, fieldBottom, level, world, holdings, tick);
+  // solids they steer around: manor, windmill, pond water, plot soil (inset
+  // so they brush edges but never stand on crops), scarecrow, coop, yard props
+  const solid: Rect[] = [
+    { x: hx - 12, y: hy - 6, w: hw + 24, h: hh + 12 },
+    { x: 604, y: FIELD_TOP + 116, w: 100, h: 150 },
+    ...(level >= 4 ? [{ x: 532, y: height - 132, w: 136, h: 64 }] : [{ x: 560, y: height - 160, w: 90, h: 60 }]),
+    ...holdings.map((_, i) => ({
+      x: COL_X[i % COLS] + 4,
+      y: FIELD_TOP + Math.floor(i / COLS) * ROW_PITCH + 4,
+      w: PLOT_W - 8,
+      h: PLOT_W - 8,
+    })),
+    { x: 296, y: FIELD_TOP + 16, w: 46, h: 56 },
+    { x: 128, y: fieldBottom - 40, w: 46, h: 50 },
+    { x: hx - 84, y: fy - 28, w: 44, h: 46 },
+    { x: hx - 18, y: fy - 6, w: 22, h: 24 },
+    { x: hx + 10, y: fy - 12, w: 38, h: 30 },
+    { x: hx + 75, y: fy - 12, w: 38, h: 30 },
+    { x: hx - 18, y: fy - 4, w: 34, h: 26 },
+    { x: STUB_X - 50, y: FIELD_TOP - 6, w: 56, h: 40 },
+  ];
+  updateCritters(solid, width, height, level, world, holdings, tick);
+  // debug hook: live critter state for the browser console
+  (window as unknown as Record<string, unknown>).__dd = {
+    tick,
+    critters: critters!.map((c) => ({
+      k: c.kind.slice(0, 2),
+      x: Math.round(c.x),
+      y: Math.round(c.y),
+      tx: Math.round(c.tx),
+      ty: Math.round(c.ty),
+      p: c.pause,
+      t: c.tick,
+    })),
+  };
   const drawn = [...critters!].sort((a, b) => a.y - b.y);
   for (const c of drawn) {
     const moving = c.pause <= 0;

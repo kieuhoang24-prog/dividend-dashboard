@@ -82,6 +82,15 @@ app.get("/api/next-payouts", async (c) => {
   );
 });
 
+// index.html must always revalidate (hashed assets cache forever, the shell
+// must not — otherwise browsers pin a stale bundle across deploys)
+app.use(async (c, next) => {
+  await next();
+  if (c.req.path === "/" || c.req.path === "/index.html") {
+    c.header("Cache-Control", "no-cache, must-revalidate");
+  }
+});
+
 // Static SPA (built client). API routes are registered first and win.
 app.use("/*", serveStatic({ root: "./dist" }));
 app.get("*", serveStatic({ path: "./dist/index.html" }));
