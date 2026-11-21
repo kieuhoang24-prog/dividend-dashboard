@@ -97,6 +97,17 @@ export async function runPayoutJob(
   token: string,
 ): Promise<{ added: number; dripped: number; errors: string[] }> {
   const out = { added: 0, dripped: 0, errors: [] as string[] };
+  // the security token is NOT valid as a Bearer on API endpoints — exchange
+  // it for a JWT first (same flow the dashboard server uses)
+  const authRes = await fetch(`${baseUrl}/api/v1/auth/anonymous`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ accessToken: token }),
+  });
+  const authJson: any = await authRes.json();
+  const jwt: string = authJson?.authToken ?? authJson?.token ?? "";
+  if (!jwt) throw new Error("auth/anonymous returned no authToken");
+  token = jwt;
   const state = loadState();
   state.processed ??= {};
   state.drips ??= {};
