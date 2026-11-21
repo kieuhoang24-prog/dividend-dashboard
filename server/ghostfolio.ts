@@ -41,10 +41,10 @@ function normalizeHoldings(raw: any): RawPosition[] {
   return arr
     .filter((p) => p && typeof p === "object")
     .map((p) => ({
-      symbol: String(p.symbol ?? ""),
-      name: String(p.name ?? p.symbol ?? ""),
+      symbol: String(p.symbol ?? p.assetProfile?.symbol ?? ""),
+      name: String(p.name ?? p.assetProfile?.name ?? p.symbol ?? ""),
       quantity: Number(p.quantity ?? 0) || 0,
-      value: Number(p.valueInBaseCurrency ?? p.value ?? 0) || 0,
+      value: (Number(p.valueInBaseCurrency ?? p.value ?? 0) || 0) * 0.765, /* Ghostfolio base is USD; farm shows GBP */
       assetClass: p.assetClass ? String(p.assetClass) : undefined,
     }))
     .filter((p) => p.symbol && !isCashPosition(p.symbol, p.assetClass) && (p.quantity > 0 || p.value > 0))
@@ -103,7 +103,7 @@ export async function fetchUpstream(
     .map((a) => ({
       symbol: String(a.symbol),
       date: String(a.date).slice(0, 10),
-      amount: Number(a.valueInBaseCurrency ?? a.value ?? 0) || 0,
+      amount: (Number(a.quantity) * Number(a.unitPrice) || 0) * (a.currency === "GBp" ? 0.01 : a.currency === "USD" ? 0.765 : 1),
     }));
 
   return buildPayload({

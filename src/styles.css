@@ -383,9 +383,17 @@ code.snip {
 }
 
 /* ── kiosk (Home Assistant embed) ───────────────────────── */
-.kiosk .tabs,
 .kiosk .app-footer {
   display: none;
+}
+/* tabs stay reachable in kiosk (wall panels) — compact */
+.kiosk .tabs {
+  display: flex;
+  padding: 6px 0 2px;
+}
+.kiosk .tabs button {
+  font-size: 12px;
+  padding: 6px 10px;
 }
 .kiosk .app {
   padding-bottom: 10px;
@@ -439,4 +447,25 @@ code.snip {
   font-size: 7px;
   padding: 5px 8px;
   margin-top: 4px;
+}
+
+/* two-column income header: next dividend | annual income */
+.income-head.head-cols {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 28px;
+  flex-wrap: wrap;
+}
+.income-head.head-cols .head-col {
+  flex: 0 1 auto;
+  min-width: 230px;
+}
+.income-head.head-cols .head-col + .head-col {
+  border-left: 2px solid var(--border);
+  padding-left: 28px;
+}
+.income-head .big .next-sym {
+  font-size: 0.55em;
+  color: var(--accent);
 }

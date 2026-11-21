@@ -2,7 +2,7 @@
 // per-stock growth stages, manor + yard, orchard, windmill, pond, critters
 // (farmer AI: water/harvest/plant per stock), particles, day/night, weather.
 
-import { C, TILE, CROP_NAMES, drawSign, drawText } from "./art.js";
+import { C, TILE, CROP_NAMES, drawSign, drawText, textWidth } from "./art.js";
 import {
   drawAsset,
   assetAspect,
@@ -1058,21 +1058,23 @@ export function drawScene(
   // chicken coop at the end of the gutter walkway
   drawPropSprite(ctx, "coop", 150, fieldBottom + 10, 48);
 
-  // harvest countdown board
+  // post-box sign below the mansion: next harvest countdown
   const nextPayout = holdings
     .map((h) => h.growth?.nextPayout)
     .filter(Boolean)
     .sort()[0];
   if (nextPayout) {
     const days = Math.max(0, Math.round((Date.parse(`${nextPayout}T12:00:00Z`) - Date.now()) / 86400000));
-    const bx = STUB_X - 46;
-    const by = FIELD_TOP - 2;
-    p(ctx, C.outline, bx - 2, by + 14, 6, 22);
-    p(ctx, C.woodMid, bx - 1, by + 15, 4, 20);
-    p(ctx, C.outline, bx - 4, by - 4, 52, 22);
-    p(ctx, C.woodTan, bx - 3, by - 3, 50, 20);
-    drawText(ctx, "NEXT", bx + 4, by, C.text, 1, C.outline);
-    drawText(ctx, `${days}d`, bx + 12, by + 9, C.wheat, 2, C.outline);
+    const sbx = hx + 72;
+    const sby = fy + 52;
+    drawPropSprite(ctx, "postbox-sign", sbx, sby, 52);
+    // drawPropSprite is bottom-center anchored: sprite spans x sbx-26..sbx+26, y sby-66..sby
+    const board = { x: sbx - 19, y: sby - 36, w: 38, h: 16 };
+    const label = days === 0 ? "TODAY" : `${days}d`;
+    const px = 2;
+    const tw = textWidth(label, px);
+    const color = days === 0 ? C.red : C.outline;
+    drawText(ctx, label, board.x + (board.w - tw) / 2, board.y + (board.h - 5 * px) / 2, color, px, "rgba(0,0,0,0)");
   }
 
   // milestone scaffolding
@@ -1301,8 +1303,22 @@ export function drawScene(
     mg.addColorStop(1, "rgba(190, 208, 255, 0)");
     ctx.fillStyle = mg;
     ctx.fillRect(0, 0, width, height);
-    p(ctx, "#dfe6ff", width * 0.42 - 5, 18, 9, 9);
-    p(ctx, "#aab8d8", width * 0.42 - 3, 20, 3, 3);
+    // proper pixel moon: disc + shading + craters (2px pixel grid)
+    {
+      const mcx = Math.round(width * 0.42 / 2) * 2;
+      const mcy = 30;
+      const r = 11;
+      for (let dy = -r; dy <= r; dy += 2) {
+        const w = Math.floor(Math.sqrt(r * r - dy * dy) / 2) * 2;
+        if (w <= 0) continue;
+        // top-left lit, bottom-right shaded
+        const shade = dy > 2 || (dy >= 0 && w < r - 3);
+        p(ctx, shade ? "#c9d4f2" : "#eef2ff", mcx - w, mcy + dy, w * 2, 2);
+      }
+      p(ctx, "#b4c2e6", mcx - 8, mcy - 4, 6, 4);
+      p(ctx, "#b4c2e6", mcx + 2, mcy + 4, 4, 4);
+      p(ctx, "#b4c2e6", mcx - 2, mcy + 8, 6, 4);
+    }
     // lantern at the path end (flicker)
     const flick = tick % 5 === 0 ? 0.82 : 1;
     addLight(ctx, hx - 14, fy - 8, 46, `rgba(255, 190, 105, ${0.5 * lightA * flick})`);

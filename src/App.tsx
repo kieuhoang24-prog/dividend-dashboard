@@ -65,15 +65,49 @@ export function App() {
     );
   }
 
-  const tabs = kiosk ? TABS.filter((t) => t.id !== "settings") : TABS;
+  const tabs = TABS;
 
   return (
     <div className={`app${kiosk ? " kiosk" : ""}`}>
-      <div className="income-head">
-        <div className="label">ESTIMATED ANNUAL INCOME</div>
-        <div className="big">{money(data, data.totals.annualDividend)}</div>
-        <div className="sub">
-          {money(data, data.totals.monthlyDividend)} / month · <b>{data.farm.name}</b>
+      <div className="income-head head-cols">
+        {(() => {
+          const hs = (data.holdings || []).filter((h) => h && h.growth && h.growth.nextPayout);
+          let next = null, est = 0, when = "";
+          if (hs.length) {
+            const sorted = hs.slice().sort((a, b) => String(a.growth!.nextPayout).localeCompare(String(b.growth!.nextPayout)));
+            next = sorted[0];
+            const g = next.growth!;
+            const dayMs = 24 * 60 * 60 * 1000;
+            const today = new Date(new Date().toDateString());
+            const due = new Date(g.nextPayout + "T00:00:00");
+            const days = Math.round((due.getTime() - today.getTime()) / dayMs);
+            // per-payout estimate: trailing-12m income spread over the payout cycle
+            est = next.t12mDividend && g.cycleDays ? (next.t12mDividend * g.cycleDays) / 365 : 0;
+            when = days <= 0 ? "due now" : `in ${days} day${days === 1 ? "" : "s"}`;
+          }
+          return (
+            <div className="head-col">
+              <div className="label">NEXT DIVIDEND</div>
+              <div className="big">
+                {next ? (
+                  <>
+                    {money(data, est)}
+                    <span className="next-sym"> {next.symbol}</span>
+                  </>
+                ) : (
+                  "—"
+                )}
+              </div>
+              <div className="sub">{next ? <>on {next.growth!.nextPayout} · {when}</> : "no upcoming payouts"}</div>
+            </div>
+          );
+        })()}
+        <div className="head-col">
+          <div className="label">ESTIMATED ANNUAL INCOME</div>
+          <div className="big">{money(data, data.totals.annualDividend)}</div>
+          <div className="sub">
+            {money(data, data.totals.monthlyDividend)} / month · <b>{data.farm.name}</b>
+          </div>
         </div>
       </div>
 
@@ -84,7 +118,7 @@ export function App() {
       )}
       {data.meta.warning && <div className="banner warn">⚠ {data.meta.warning}</div>}
 
-      {!kiosk && (
+      {(
         <div className="tabs">
           {tabs.map((t) => (
             <button

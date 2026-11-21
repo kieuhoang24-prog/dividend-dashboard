@@ -3,6 +3,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { demoPayload } from "./demo.js";
 import { fetchUpstream } from "./ghostfolio.js";
+import { runPayoutJob, loadDripSettings, saveDripSettings } from "./payouts.js";
 import type { PortfolioPayload } from "../shared/types.js";
 
 const PORT = Number(process.env.PORT ?? 8090);
@@ -61,6 +62,23 @@ async function getPayload(force: boolean): Promise<PortfolioPayload> {
 
 const app = new Hono();
 
+// ── dividend payout auto-importer + DRIP (runs 90s after boot, then every 6h) ──
+async function safePayoutJob(): Promise<void> {
+  if (!GHOSTFOLIO_TOKEN) return;
+  try {
+    const r = await runPayoutJob(GHOSTFOLIO_URL, GHOSTFOLIO_TOKEN);
+    if (r.added || r.dripped || r.errors.length) {
+      console.log(`[payouts] added=${r.added} dripped=${r.dripped} errors=${r.errors.length}`);
+      cache = null; // force a fresh fetch so the UI reflects new activities
+    }
+  } catch (err: any) {
+    console.warn(`[payouts] job failed: ${String(err?.message ?? err)}`);
+  }
+}
+setTimeout(safePayoutJob, 90 * 1000);
+setInterval(safePayoutJob, 6 * 3600 * 1000);
+
+
 // optional LAN gate: set DASHBOARD_API_KEY to require it on /api endpoints
 // (health stays open). Off by default for trusted home networks.
 if (API_KEY) {
@@ -114,6 +132,31 @@ app.use(async (c, next) => {
   await next();
   if (c.req.path === "/" || c.req.path === "/index.html") {
     c.header("Cache-Control", "no-cache, must-revalidate");
+  }
+});
+
+app.get("/api/drip-settings", (c) => c.json(loadDripSettings()));
+
+app.post("/api/drip-settings", async (c) => {
+  const body = await c.req.json().catch(() => null);
+  if (!body || typeof body.enabled !== "boolean") {
+    return c.json({ error: "boolean 'enabled' required" }, 400);
+  }
+  const cur = loadDripSettings();
+  const next = {
+    enabled: body.enabled as boolean,
+    symbols: body.symbols && typeof body.symbols === "object" ? body.symbols : cur.symbols,
+  };
+  saveDripSettings(next);
+  return c.json(next);
+});
+
+app.post("/api/payout-job", async (c) => {
+  if (!GHOSTFOLIO_TOKEN) return c.json({ error: "no token configured" }, 400);
+  try {
+    return c.json(await runPayoutJob(GHOSTFOLIO_URL, GHOSTFOLIO_TOKEN));
+  } catch (err: any) {
+    return c.json({ error: String(err?.message ?? err) }, 500);
   }
 });
 

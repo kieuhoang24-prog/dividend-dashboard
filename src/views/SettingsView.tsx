@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getHealth, type HealthInfo } from "../data/api";
+import { getHealth, getDripSettings, saveDripSettings, runPayoutJobNow, type HealthInfo, type DripSettings } from "../data/api";
 import type { PortfolioPayload } from "../../shared/types";
 import { ageLabel } from "../lib/format";
 
@@ -11,6 +11,37 @@ interface Props {
 
 export function SettingsView({ data, onRefresh, refreshing }: Props) {
   const [health, setHealth] = useState<HealthInfo | null>(null);
+  const [drip, setDrip] = useState<DripSettings | null>(null);
+  const [jobMsg, setJobMsg] = useState<string>("");
+
+  useEffect(() => {
+    getDripSettings().then(setDrip).catch(() => setDrip(null));
+  }, []);
+
+  const symbols = [...new Set((data.holdings || []).map((h) => h.symbol))];
+  const toggleGlobal = async () => {
+    const next: DripSettings = { enabled: !(drip?.enabled ?? false), symbols: drip?.symbols ?? {} };
+    setDrip(next);
+    try { setDrip(await saveDripSettings(next)); } catch { /* keep optimistic value */ }
+  };
+  const toggleSymbol = async (sym: string) => {
+    const next: DripSettings = {
+      enabled: drip?.enabled ?? false,
+      symbols: { ...(drip?.symbols ?? {}), [sym]: !(drip?.symbols?.[sym] ?? true) },
+    };
+    setDrip(next);
+    try { setDrip(await saveDripSettings(next)); } catch { /* keep optimistic value */ }
+  };
+  const runJob = async () => {
+    setJobMsg("RUNNING…");
+    try {
+      const r = await runPayoutJobNow();
+      setJobMsg(`added ${r.added} payout(s), dripped ${r.dripped}${r.errors.length ? `, ${r.errors.length} error(s)` : ""}`);
+      onRefresh();
+    } catch (e: any) {
+      setJobMsg(`failed: ${e.message ?? e}`);
+    }
+  };
 
   useEffect(() => {
     getHealth().then(setHealth).catch(() => setHealth(null));
@@ -69,6 +100,36 @@ export function SettingsView({ data, onRefresh, refreshing }: Props) {
           <span className="k">fetched</span>
           <span className="v">{ageLabel(data.meta)}</span>
         </div>
+      </div>
+
+      <div className="card">
+        <h3>COMPOUNDING (DRIP)</h3>
+        <div className="kv">
+          <span className="k">reinvest dividends</span>
+          <span className="v">
+            <button className="btn" onClick={toggleGlobal}>
+              {drip?.enabled ? "ON" : "OFF"}
+            </button>
+          </span>
+          {symbols.map((sym) => (
+            <span key={sym} style={{ display: "contents" }}>
+              <span className="k">{sym}</span>
+              <span className="v">
+                <button className="btn" onClick={() => toggleSymbol(sym)}>
+                  {drip?.enabled && drip?.symbols?.[sym] !== false ? "DRIP" : "CASH"}
+                </button>
+              </span>
+            </span>
+          ))}
+        </div>
+        <p className="hint" style={{ marginTop: 10 }}>
+          When a payout lands and DRIP is ON, the payout automatically buys more shares of the
+          same stock at that day's price — your plots fatten and income compounds.
+        </p>
+        <p style={{ marginTop: 10 }}>
+          <button className="btn" onClick={runJob}>RUN PAYOUT JOB NOW</button>
+        </p>
+        {jobMsg && <p className="hint">{jobMsg}</p>}
       </div>
 
       <div className="card">

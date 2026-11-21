@@ -8,6 +8,7 @@ export const ASSET_MANIFEST: Record<string, string> = {
   "house-barn": "/sprites/house-barn.png",
   "house-manor": "/sprites/house-manor.png",
   "tree-oak": "/sprites/tree-oak.png",
+  "postbox-sign": "/sprites/postbox-sign.png",
   "crop-wheat": "/sprites/crop-wheat.png",
   "crop-carrot": "/sprites/crop-carrot.png",
   "crop-pumpkin": "/sprites/crop-pumpkin.png",
@@ -31,6 +32,7 @@ export const ASSET_MANIFEST: Record<string, string> = {
 };
 
 export type PropName =
+  | "postbox-sign"
   | "scarecrow"
   | "haystack"
   | "logs"
@@ -343,6 +345,7 @@ export function drawCropSprite(
 }
 
 const PROP_CELLS: Record<string, [string, number, number]> = {
+  "postbox-sign": ["postbox-sign", 0, 0],
   scarecrow: ["props-sheet", 0, 0],
   haystack: ["props-sheet", 1, 0],
   logs: ["props-sheet", 2, 0],

@@ -53,6 +53,13 @@ function dayDiff(a: string, b: string): number {
   return Math.round((Date.parse(`${b}T12:00:00Z`) - Date.parse(`${a}T12:00:00Z`)) / DAY_MS);
 }
 
+function rollToBusinessDay(ms: number): number {
+  const day = new Date(ms).getUTCDay();
+  if (day === 6) return ms + 2 * DAY_MS; // Sat -> Mon
+  if (day === 0) return ms + DAY_MS; // Sun -> Mon
+  return ms;
+}
+
 /**
  * Per-stock Harvest-Moon growth cycle, driven entirely by this symbol's own
  * dividend history: seeds right after its last payout, five stages across its
@@ -74,7 +81,7 @@ export function growthFor(symbol: string, events: DividendRow[], now: Date): Hol
     ? Math.max(20, Math.min(400, Math.round(gaps[Math.floor(gaps.length / 2)])))
     : 30; // single payout → assume monthly
   const lastMs = Date.parse(`${lastPayout}T12:00:00Z`);
-  const nextMs = lastMs + cadence * DAY_MS;
+  const nextMs = rollToBusinessDay(lastMs + cadence * DAY_MS);
   const nowMs = now.getTime();
   const progress = Math.max(0, Math.min(1.4, (nowMs - lastMs) / (nextMs - lastMs)));
   // Harvest Moon pacing: spend real time tiny — seeds/sprouts early, ripe
