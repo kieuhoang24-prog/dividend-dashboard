@@ -86,6 +86,7 @@ export function FarmView({ data }: { data: PortfolioPayload }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const movedRef = useRef(false);
+  const minZoomRef = useRef(1);
   const [stage, setStage] = useState({ w: 720, h: 850 });
   const [view, setView] = useState({ zoom: 1, tx: 0, ty: 0 });
   const viewRef = useRef(view);
@@ -95,14 +96,15 @@ export function FarmView({ data }: { data: PortfolioPayload }) {
     const wrap = wrapRef.current;
     const st = stageRef.current;
     if (!wrap || !st) return v;
-    const z = Math.max(1, Math.min(4, v.zoom));
+    // zoom floor = contain scale ("whole farm visible"); ceiling 4x detail
+    const z = Math.max(minZoomRef.current, Math.min(4, v.zoom));
     const w = wrap.clientWidth;
     const h = wrap.clientHeight;
-    return {
-      zoom: z,
-      tx: Math.min(0, Math.max(w - st.offsetWidth * z, v.tx)),
-      ty: Math.min(0, Math.max(h - st.offsetHeight * z, v.ty)),
+    const axis = (size: number, viewSize: number, t: number): number => {
+      if (size * z <= viewSize) return (viewSize - size * z) / 2; // letterboxed: center
+      return Math.min(0, Math.max(viewSize - size * z, t)); // larger than view: clamp pan
     };
+    return { zoom: z, tx: axis(st.offsetWidth, w, v.tx), ty: axis(st.offsetHeight, h, v.ty) };
   };
 
   // fit the scene to the device: fill the viewport (both axes), overflow pannable
@@ -114,7 +116,10 @@ export function FarmView({ data }: { data: PortfolioPayload }) {
       const rect = wrap.getBoundingClientRect();
       const availW = Math.max(280, rect.width);
       const availH = Math.max(300, window.innerHeight - rect.top - 150);
+      // cover: fill the viewport on both axes (max use of space); overflow is
+      // pannable, and the user can zoom OUT to contain to see the whole farm
       const scale = Math.max(availW / scene.width, availH / scene.height);
+      minZoomRef.current = Math.max(0.25, Math.min(availW / scene.width, availH / scene.height) / scale);
       setStage({ w: Math.round(scene.width * scale), h: Math.round(scene.height * scale) });
       wrap.style.height = `${availH}px`;
       setView((v) => clampView(v));
@@ -159,7 +164,7 @@ export function FarmView({ data }: { data: PortfolioPayload }) {
         if (now - lastTap < 320) {
           // double-tap: toggle zoom, keeping the tapped point stable
           const target = v.zoom > 1.6 ? 1 : 2.4;
-          const z = Math.max(1, Math.min(4, target));
+          const z = Math.max(minZoomRef.current, Math.min(4, target));
           const sw = stage.offsetWidth, sh = stage.offsetHeight;
           const rect = stage.getBoundingClientRect();
           const cx = ((e.clientX - rect.left) * sw) / rect.width;
@@ -179,26 +184,18 @@ export function FarmView({ data }: { data: PortfolioPayload }) {
     const move = (e: PointerEvent) => {
       if (!ptrs.has(e.pointerId)) return;
       ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      const w = wrap.clientWidth, h = wrap.clientHeight;
-      const sw = stage.offsetWidth, sh = stage.offsetHeight;
-      const clampT = (tx: number, ty: number, z: number) => ({
-        tx: Math.min(0, Math.max(w - sw * z, tx)),
-        ty: Math.min(0, Math.max(h - sh * z, ty)),
-      });
       if (ptrs.size >= 2 && pinch) {
         const [a, b] = [...ptrs.values()];
-        const z = Math.max(1, Math.min(4, pinch.zoom * (dist(a, b) / pinch.dist)));
+        const z = Math.max(minZoomRef.current, Math.min(4, pinch.zoom * (dist(a, b) / pinch.dist)));
         const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
         const nv = { zoom: z, tx: mx - (z * (pinch.cx - pinch.tx)) / pinch.zoom, ty: my - (z * (pinch.cy - pinch.ty)) / pinch.zoom };
-        const c = clampT(nv.tx, nv.ty, z);
-        setView({ zoom: z, ...c });
+        setView(clampView(nv));
         movedRef.current = true;
       } else if (pan && ptrs.size === 1) {
         const z = viewRef.current.zoom;
         const dx = e.clientX - pan.x, dy = e.clientY - pan.y;
         if (Math.hypot(dx, dy) > 6) movedRef.current = true;
-        const c = clampT(pan.tx + dx, pan.ty + dy, z);
-        setView({ zoom: z, ...c });
+        setView(clampView({ zoom: z, tx: pan.tx + dx, ty: pan.ty + dy }));
       }
     };
 
@@ -211,13 +208,10 @@ export function FarmView({ data }: { data: PortfolioPayload }) {
     const wheel = (e: WheelEvent) => {
       e.preventDefault();
       const v = viewRef.current;
-      const sw = stage.offsetWidth, sh = stage.offsetHeight;
       const w = wrap.clientWidth, h = wrap.clientHeight;
-      const z = Math.max(1, Math.min(4, v.zoom * (e.deltaY < 0 ? 1.15 : 0.87)));
+      const z = Math.max(minZoomRef.current, Math.min(4, v.zoom * (e.deltaY < 0 ? 1.15 : 0.87)));
       const cx = (w / 2 - v.tx) / v.zoom, cy = (h / 2 - v.ty) / v.zoom;
-      const nv = { zoom: z, tx: w / 2 - z * cx, ty: h / 2 - z * cy };
-      const c = { tx: Math.min(0, Math.max(w - sw * z, nv.tx)), ty: Math.min(0, Math.max(h - sh * z, nv.ty)) };
-      setView({ zoom: z, ...c });
+      setView(clampView({ zoom: z, tx: w / 2 - z * cx, ty: h / 2 - z * cy }));
       movedRef.current = true;
     };
 
