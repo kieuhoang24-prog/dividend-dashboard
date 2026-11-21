@@ -81,6 +81,161 @@ export function FarmView({ data }: { data: PortfolioPayload }) {
     if (key === "sound" && worldRef.current) startAmbience(worldRef.current, next.sound);
   };
 
+
+  // ── auto-size + pinch/pan/zoom ──
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const movedRef = useRef(false);
+  const [stage, setStage] = useState({ w: 720, h: 850 });
+  const [view, setView] = useState({ zoom: 1, tx: 0, ty: 0 });
+  const viewRef = useRef(view);
+  viewRef.current = view;
+
+  const clampView = (v: { zoom: number; tx: number; ty: number }): { zoom: number; tx: number; ty: number } => {
+    const wrap = wrapRef.current;
+    const st = stageRef.current;
+    if (!wrap || !st) return v;
+    const z = Math.max(1, Math.min(4, v.zoom));
+    const w = wrap.clientWidth;
+    const h = wrap.clientHeight;
+    return {
+      zoom: z,
+      tx: Math.min(0, Math.max(w - st.offsetWidth * z, v.tx)),
+      ty: Math.min(0, Math.max(h - st.offsetHeight * z, v.ty)),
+    };
+  };
+
+  // fit the scene to the device: fill the viewport (both axes), overflow pannable
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const scene = sceneSize(data.holdings);
+    const fit = () => {
+      const rect = wrap.getBoundingClientRect();
+      const availW = Math.max(280, rect.width);
+      const availH = Math.max(300, window.innerHeight - rect.top - 150);
+      const scale = Math.max(availW / scene.width, availH / scene.height);
+      setStage({ w: Math.round(scene.width * scale), h: Math.round(scene.height * scale) });
+      wrap.style.height = `${availH}px`;
+      setView((v) => clampView(v));
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(wrap);
+    window.addEventListener("orientationchange", fit);
+    window.addEventListener("resize", fit);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("orientationchange", fit);
+      window.removeEventListener("resize", fit);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.holdings.length]);
+
+  // gestures: 1-finger pan, 2-finger pinch, double-tap zoom, wheel zoom
+  useEffect(() => {
+    const stage = stageRef.current;
+    const wrap = wrapRef.current;
+    if (!stage || !wrap) return;
+    const ptrs = new Map<number, { x: number; y: number }>();
+    let pinch: { dist: number; zoom: number; cx: number; cy: number; tx: number; ty: number } | null = null;
+    let pan: { x: number; y: number; tx: number; ty: number } | null = null;
+    let lastTap = 0;
+
+    const dist = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y);
+
+    const down = (e: PointerEvent) => {
+      try { stage.setPointerCapture(e.pointerId); } catch { /* synthetic or unsupported pointer */ }
+      ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      movedRef.current = false;
+      if (ptrs.size === 2) {
+        const [a, b] = [...ptrs.values()];
+        const v = viewRef.current;
+        pinch = { dist: dist(a, b), zoom: v.zoom, cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, tx: v.tx, ty: v.ty };
+        pan = null;
+      } else if (ptrs.size === 1) {
+        const now = Date.now();
+        const v = viewRef.current;
+        if (now - lastTap < 320) {
+          // double-tap: toggle zoom, keeping the tapped point stable
+          const target = v.zoom > 1.6 ? 1 : 2.4;
+          const z = Math.max(1, Math.min(4, target));
+          const sw = stage.offsetWidth, sh = stage.offsetHeight;
+          const rect = stage.getBoundingClientRect();
+          const cx = ((e.clientX - rect.left) * sw) / rect.width;
+          const cy = ((e.clientY - rect.top) * sh) / rect.height;
+          const nv = { zoom: z, tx: e.clientX - rect.left - z * cx + (rect.width - sw) / 2, ty: e.clientY - rect.top - z * cy + (rect.height - sh) / 2 };
+          const c = clampView(nv);
+          setView(c);
+          lastTap = 0;
+        } else {
+          lastTap = now;
+          pan = { x: e.clientX, y: e.clientY, tx: v.tx, ty: v.ty };
+        }
+        if (ptrs.size === 1 && viewRef.current.zoom <= 1) pan = null; // nothing to pan at fit
+      }
+    };
+
+    const move = (e: PointerEvent) => {
+      if (!ptrs.has(e.pointerId)) return;
+      ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      const w = wrap.clientWidth, h = wrap.clientHeight;
+      const sw = stage.offsetWidth, sh = stage.offsetHeight;
+      const clampT = (tx: number, ty: number, z: number) => ({
+        tx: Math.min(0, Math.max(w - sw * z, tx)),
+        ty: Math.min(0, Math.max(h - sh * z, ty)),
+      });
+      if (ptrs.size >= 2 && pinch) {
+        const [a, b] = [...ptrs.values()];
+        const z = Math.max(1, Math.min(4, pinch.zoom * (dist(a, b) / pinch.dist)));
+        const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+        const nv = { zoom: z, tx: mx - (z * (pinch.cx - pinch.tx)) / pinch.zoom, ty: my - (z * (pinch.cy - pinch.ty)) / pinch.zoom };
+        const c = clampT(nv.tx, nv.ty, z);
+        setView({ zoom: z, ...c });
+        movedRef.current = true;
+      } else if (pan && ptrs.size === 1) {
+        const z = viewRef.current.zoom;
+        const dx = e.clientX - pan.x, dy = e.clientY - pan.y;
+        if (Math.hypot(dx, dy) > 6) movedRef.current = true;
+        const c = clampT(pan.tx + dx, pan.ty + dy, z);
+        setView({ zoom: z, ...c });
+      }
+    };
+
+    const up = (e: PointerEvent) => {
+      ptrs.delete(e.pointerId);
+      if (ptrs.size < 2) pinch = null;
+      if (ptrs.size === 0) pan = null;
+    };
+
+    const wheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const v = viewRef.current;
+      const sw = stage.offsetWidth, sh = stage.offsetHeight;
+      const w = wrap.clientWidth, h = wrap.clientHeight;
+      const z = Math.max(1, Math.min(4, v.zoom * (e.deltaY < 0 ? 1.15 : 0.87)));
+      const cx = (w / 2 - v.tx) / v.zoom, cy = (h / 2 - v.ty) / v.zoom;
+      const nv = { zoom: z, tx: w / 2 - z * cx, ty: h / 2 - z * cy };
+      const c = { tx: Math.min(0, Math.max(w - sw * z, nv.tx)), ty: Math.min(0, Math.max(h - sh * z, nv.ty)) };
+      setView({ zoom: z, ...c });
+      movedRef.current = true;
+    };
+
+    stage.addEventListener("pointerdown", down);
+    stage.addEventListener("pointermove", move);
+    stage.addEventListener("pointerup", up);
+    stage.addEventListener("pointercancel", up);
+    stage.addEventListener("wheel", wheel, { passive: false });
+    return () => {
+      stage.removeEventListener("pointerdown", down);
+      stage.removeEventListener("pointermove", move);
+      stage.removeEventListener("pointerup", up);
+      stage.removeEventListener("pointercancel", up);
+      stage.removeEventListener("wheel", wheel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // cinematic slow pan/zoom on the canvas element itself
   useEffect(() => {
     if (!settings.cinematic) {
@@ -98,6 +253,7 @@ export function FarmView({ data }: { data: PortfolioPayload }) {
   }, [settings.cinematic]);
 
   const onCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (movedRef.current) return; // gesture moved — not a tap
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
@@ -139,31 +295,41 @@ export function FarmView({ data }: { data: PortfolioPayload }) {
 
   return (
     <div>
-      <div className="farm-wrap" style={{ position: "relative" }}>
-        <canvas
-          ref={canvasRef}
-          onClick={onCanvasClick}
-          role="img"
-          aria-label={`Farm plots: ${data.holdings.map((h) => `${h.symbol} ${money(data, h.t12mDividend)} per year`).join(", ")}`}
-        />
-        {selected && (
-          <div
-            className="plot-panel"
-            style={{
-              left: `${(selected.x / sceneSize(data.holdings).width) * 100}%`,
-              top: `${(selected.y / sceneSize(data.holdings).height) * 100}%`,
-            }}
-          >
-            <b>{selected.symbol}</b> · {selected.name}
-            <br />
-            yield {selected.pct.toFixed(1)}% ·{" "}
-            {selected.payingNow
-              ? "paying now"
-              : `pays in ${selected.daysTo}d`}
-            <br />
-            <button className="btn tiny" onClick={() => setSelected(null)}>CLOSE</button>
-          </div>
-        )}
+      <div className="farm-wrap" ref={wrapRef}>
+        <div
+          className="farm-stage"
+          ref={stageRef}
+          style={{
+            width: `${stage.w}px`,
+            height: `${stage.h}px`,
+            transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.zoom})`,
+          }}
+        >
+          <canvas
+            ref={canvasRef}
+            onClick={onCanvasClick}
+            role="img"
+            aria-label={`Farm plots: ${data.holdings.map((h) => `${h.symbol} ${money(data, h.t12mDividend)} per year`).join(", ")}`}
+          />
+          {selected && (
+            <div
+              className="plot-panel"
+              style={{
+                left: `${(selected.x / sceneSize(data.holdings).width) * 100}%`,
+                top: `${(selected.y / sceneSize(data.holdings).height) * 100}%`,
+              }}
+            >
+              <b>{selected.symbol}</b> · {selected.name}
+              <br />
+              yield {selected.pct.toFixed(1)}% ·{" "}
+              {selected.payingNow
+                ? "paying now"
+                : `pays in ${selected.daysTo}d`}
+              <br />
+              <button className="btn tiny" onClick={() => setSelected(null)}>CLOSE</button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="farm-stats">

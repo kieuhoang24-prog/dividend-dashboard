@@ -135,7 +135,7 @@ export function SettingsView({ data, onRefresh, refreshing }: Props) {
       <div className="card">
         <h3>HOME ASSISTANT</h3>
         <p className="hint" style={{ marginTop: 0 }}>
-          Paste this into a Lovelace manual card (or use it as an iframe panel URL):
+          Paste this into a Lovelace manual card (or use it as an iframe panel URL).
         </p>
         <code className="snip">{`type: iframe
 title: Dividend Farm
